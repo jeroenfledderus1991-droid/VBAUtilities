@@ -1,0 +1,9 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+packages/*/lib/
+*.ncb
+*.sdf
+Thumbs.db

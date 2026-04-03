@@ -1,0 +1,66 @@
+﻿# Build-VBEAddIn.ps1
+# Bouwt de VBE Add-in + installer
+
+param(
+    [switch]$Release = $true,
+    [switch]$Debug = $false
+)
+
+$ErrorActionPreference = "Stop"
+
+$config = if ($Debug) { "Debug" } else { "Release" }
+
+Write-Host "`n=== VBE Add-in Builder ===" -ForegroundColor Cyan
+Write-Host "Configuratie: $config`n" -ForegroundColor Gray
+
+# MSBuild pad (gebruik de moderne versie)
+$msbuild = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
+if (-not (Test-Path $msbuild)) {
+    Write-Host "ERROR: MSBuild niet gevonden op $msbuild" -ForegroundColor Red
+    exit 1
+}
+Write-Host "MSBuild gevonden: $msbuild`n" -ForegroundColor Gray
+
+# Naar scriptdirectory gaan (waar het project staat)
+$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $scriptPath
+Write-Host "Werkmap: $(Get-Location)`n" -ForegroundColor Gray
+
+# 1. Bouw het VBEAddIn-project
+Write-Host "[1/2] Building VBEAddIn project..." -ForegroundColor Yellow
+& $msbuild ".\VBEAddIn.csproj" /p:Configuration=$config /t:Clean,Build /nologo /v:minimal
+if ($LASTEXITCODE -ne 0) { Write-Host "`n✗ VBEAddIn project build FAILED" -ForegroundColor Red; exit 1 }
+Write-Host "✓ VBEAddIn.dll gebouwd`n" -ForegroundColor Green
+
+# 2. Bouw de installer
+Write-Host "[2/2] Building Installer..." -ForegroundColor Yellow
+& $msbuild ".\Installer\Installer.csproj" /p:Configuration=$config /t:Rebuild /nologo /v:minimal
+if ($LASTEXITCODE -ne 0) { Write-Host "`n✗ Installer build FAILED" -ForegroundColor Red; exit 1 }
+Write-Host "✓ Installer gebouwd`n" -ForegroundColor Green
+
+# Output tonen
+$installerPath = ".\Installer\bin\$config\VBEAddIn-Installer.exe"
+$dllPath = ".\bin\$config\VBEAddIn.dll"
+
+Write-Host "=== BUILD SUCCESS ===" -ForegroundColor Green
+Write-Host "`nOutput:" -ForegroundColor Cyan
+
+if (Test-Path $installerPath) {
+    $installerFile = Get-Item $installerPath
+    Write-Host "  Installer: $installerPath" -ForegroundColor Gray
+   Write-Host "             $([math]::Round($installerFile.Length / 1KB, 2)) KB - $($installerFile.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))" -ForegroundColor Gray
+} else {
+    Write-Host "  WARNING: Installer niet gevonden op $installerPath" -ForegroundColor Yellow
+}
+
+if (Test-Path $dllPath) {
+    $dllFile = Get-Item $dllPath
+    Write-Host "  DLL:       $dllPath" -ForegroundColor Gray
+    Write-Host "             $([math]::Round($dllFile.Length / 1KB, 2)) KB - $($dllFile.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))" -ForegroundColor Gray
+} else {
+    Write-Host "  WARNING: DLL niet gevonden op $dllPath" -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "Project gereed!" -ForegroundColor Green
+Write-Host ""
