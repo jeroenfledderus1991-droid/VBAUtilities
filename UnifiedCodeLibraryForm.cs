@@ -594,13 +594,22 @@ namespace VBEAddIn
         // Drag & Drop for export
         private void LstProjectModules_MouseDown(object sender, MouseEventArgs e)
         {
-            if (lstProjectModules.SelectedItem == null)
+            if (e.Button != MouseButtons.Left)
                 return;
-            
-            int index = lstProjectModules.SelectedIndex;
+
+            int index = lstProjectModules.IndexFromPoint(e.Location);
+            if (index == ListBox.NoMatches)
+                return;
+
+            Rectangle itemRect = lstProjectModules.GetItemRectangle(index);
+            int checkboxClickWidth = 18;
+            if (e.X <= itemRect.Left + checkboxClickWidth)
+                return;
+
             if (!projectComponentMap.ContainsKey(index))
                 return;
-            
+
+            lstProjectModules.SelectedIndex = index;
             lstProjectModules.DoDragDrop(index, DragDropEffects.Copy);
         }
         
