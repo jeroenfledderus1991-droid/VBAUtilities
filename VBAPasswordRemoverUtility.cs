@@ -1,18 +1,13 @@
 using System;
-using System.IO;
-using System.IO.Compression;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Windows.Forms;
 using Microsoft.Vbe.Interop;
 using Excel = Microsoft.Office.Interop.Excel;
 
 namespace VBEAddIn
 {
     /// <summary>
-    /// Probeert eerst binnen de huidige Excel sessie een tijdelijk VBA-project te gebruiken
-    /// om de bekende hook-code uit te voeren. Als dat niet lukt, valt de utility terug op
-    /// het patchen van de DPB-hash in het bestand zelf.
+    /// Voert tijdelijk een VBA module uit vanuit een open, schrijfbaar werkboek.
+    /// De geïnjecteerde module blijft staan voor hergebruik.
     /// </summary>
     public static class VBAPasswordRemoverUtility
     {
@@ -37,23 +32,21 @@ Dim OriginBytes(0 To 11) As Byte
 Dim pFunc As LongPtr
 Dim Flag As Boolean
 
+''zet deze code in module 2
+'Sub unprotected(Optional strBook$)
 Sub unprotected()
     If Hook Then
         MsgBox ""VBA Project is unprotected!"", vbInformation, String(Len(""VBA Project is unprotected!"") * 1.5, ""*"")
     End If
 End Sub
 
+
+
+
 Sub unprotectVBA()
     If Hook Then
+        ' MsgBox ""VBA Project is unprotected!"", vbInformation, String(Len(""VBA Project is unprotected!"") * 1.5, ""*"")
     End If
-End Sub
-
-Public Sub InstallHook()
-    unprotectVBA
-End Sub
-
-Public Sub RemoveHook()
-    RecoverBytes
 End Sub
 
 Private Function GetPtr(ByVal Value As LongPtr) As LongPtr
@@ -61,7 +54,7 @@ Private Function GetPtr(ByVal Value As LongPtr) As LongPtr
 End Function
 
 Public Sub RecoverBytes()
-    If Flag Then MoveMemory ByVal pFunc, ByVal VarPtr(OriginBytes(0)), 12
+    If Flag Then MoveMemory ByVal pFunc, ByVal varPtr(OriginBytes(0)), 12
 End Sub
 
 Public Function Hook() As Boolean
@@ -79,17 +72,17 @@ Public Function Hook() As Boolean
 
     pFunc = GetProcAddress(GetModuleHandleA(""user32.dll""), ""DialogBoxParamA"")
     If VirtualProtect(ByVal pFunc, 12, PAGE_EXECUTE_READWRITE, OriginProtect) <> 0 Then
-        MoveMemory ByVal VarPtr(TmpBytes(0)), ByVal pFunc, osi + 1
+        MoveMemory ByVal varPtr(TmpBytes(0)), ByVal pFunc, osi + 1
         If TmpBytes(osi) <> &HB8 Then
-            MoveMemory ByVal VarPtr(OriginBytes(0)), ByVal pFunc, 12
+            MoveMemory ByVal varPtr(OriginBytes(0)), ByVal pFunc, 12
             p = GetPtr(AddressOf MyDialogBoxParam)
             If osi Then HookBytes(0) = &H48
             HookBytes(osi) = &HB8
             osi = osi + 1
-            MoveMemory ByVal VarPtr(HookBytes(osi)), ByVal VarPtr(p), 4 * osi
+            MoveMemory ByVal varPtr(HookBytes(osi)), ByVal varPtr(p), 4 * osi
             HookBytes(osi + 4 * osi) = &HFF
             HookBytes(osi + 4 * osi + 1) = &HE0
-            MoveMemory ByVal pFunc, ByVal VarPtr(HookBytes(0)), 12
+            MoveMemory ByVal pFunc, ByVal varPtr(HookBytes(0)), 12
             Flag = True
             Hook = True
         End If
@@ -107,53 +100,15 @@ Private Function MyDialogBoxParam(ByVal hInstance As LongPtr, _
             hwndParent, lpDialogFunc, dwInitParam)
         Hook
     End If
-End Function";
+End Function
+
+";
 
         public static void Execute(VBE vbe)
         {
-            string suggestedPath = GetSuggestedPath(vbe);
             string targetProjectName = GetTargetProjectName(vbe);
-
             string inExcelFailureReason;
-            if (TryUnlockInsideExcel(vbe, targetProjectName, out inExcelFailureReason))
-            {
-                MessageBox.Show(
-                    "Het VBA project lijkt binnen de huidige Excel sessie ontgrendeld te zijn.\n\n" +
-                    "Als je het wachtwoord permanent wilt verwijderen, open dan VBAProject Properties > Protection, " +
-                    "haal het vinkje weg en sla het bestand opnieuw op.",
-                    "VBA Wachtwoord Verwijderen",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
-                return;
-            }
-
-            string message = "Ontgrendelen binnen Excel is niet gelukt.";
-            if (!string.IsNullOrEmpty(inExcelFailureReason))
-            {
-                message += "\n\nReden:\n" + inExcelFailureReason;
-            }
-
-            MessageBox.Show(
-                message + "\n\nDe utility schakelt nu over op de bestandsmethode.",
-                "VBA Wachtwoord Verwijderen",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
-
-            PromptAndPatchFile(suggestedPath);
-        }
-
-        private static string GetSuggestedPath(VBE vbe)
-        {
-            try
-            {
-                if (vbe != null && vbe.ActiveVBProject != null)
-                {
-                    return vbe.ActiveVBProject.FileName;
-                }
-            }
-            catch { }
-
-            return string.Empty;
+            TryUnlockInsideExcel(vbe, targetProjectName, out inExcelFailureReason);
         }
 
         private static string GetTargetProjectName(VBE vbe)
@@ -180,55 +135,44 @@ End Function";
                 return false;
             }
 
-            if (string.IsNullOrEmpty(targetProjectName))
+            if (string.IsNullOrWhiteSpace(targetProjectName))
             {
                 failureReason = "Kon de projectnaam van het actieve VBA project niet bepalen.";
                 return false;
             }
 
             Excel.Application excelApp = null;
-            Excel.Workbook tempWorkbook = null;
-            VBProject tempProject = null;
-            VBProject targetProject = vbe.ActiveVBProject;
+            Excel.Workbook hostWorkbook = null;
+            VBProject hostProject = null;
+            VBComponent injectedModule = null;
             string macroPrefix = string.Empty;
-            bool previousDisplayAlerts = true;
 
             try
             {
                 excelApp = (Excel.Application)Marshal.GetActiveObject("Excel.Application");
-                previousDisplayAlerts = excelApp.DisplayAlerts;
-                excelApp.DisplayAlerts = false;
-                tempWorkbook = excelApp.Workbooks.Add();
-                if (tempWorkbook.Windows.Count > 0)
+                hostWorkbook = FindWritableHostWorkbook(excelApp);
+                if (hostWorkbook == null)
                 {
-                    tempWorkbook.Windows[1].Visible = false;
-                }
-                tempProject = tempWorkbook.VBProject;
-
-                VBComponent module = tempProject.VBComponents.Add(vbext_ComponentType.vbext_ct_StdModule);
-                module.Name = TempModuleName;
-                WriteModuleCode(module.CodeModule, HookCode);
-
-                string injectedCode = module.CodeModule.Lines[1, module.CodeModule.CountOfLines];
-                if (!IsInjectedCodeValid(injectedCode))
-                {
-                    failureReason = "De tijdelijke VBA module is niet correct gevuld. De code in het tijdelijke project wijkt af van de broncode.";
+                    failureReason = "Open eerst een onbeveiligd Excel-werkboek waarin tijdelijk een module geplaatst mag worden.";
                     return false;
                 }
 
-                macroPrefix = QuoteWorkbookName(tempWorkbook.Name) + TempModuleName + ".";
-                excelApp.Run(macroPrefix + "InstallHook");
+                hostProject = hostWorkbook.VBProject;
 
-                // Trigger toegang tot het OORSPRONKELIJKE beveiligde project terwijl de hook actief is.
-                int componentCount = targetProject.VBComponents.Count;
+                injectedModule = hostProject.VBComponents.Add(vbext_ComponentType.vbext_ct_StdModule);
+                injectedModule.Name = BuildInjectedModuleName(hostProject);
+                WriteModuleCode(injectedModule.CodeModule, HookCode);
 
-                try
+                string injectedCode = injectedModule.CodeModule.Lines[1, injectedModule.CodeModule.CountOfLines];
+                if (!IsInjectedCodeValid(injectedCode))
                 {
-                    excelApp.Run(macroPrefix + "RemoveHook");
+                    failureReason = "De tijdelijke VBA module is niet correct gevuld. De code in het host-project wijkt af van de broncode.";
+                    return false;
                 }
-                catch { }
 
-                return componentCount >= 0;
+                macroPrefix = QuoteWorkbookName(hostWorkbook.Name) + injectedModule.Name + ".";
+                excelApp.Run(macroPrefix + "unprotected");
+                return true;
             }
             catch (COMException ex)
             {
@@ -242,38 +186,167 @@ End Function";
             }
             finally
             {
-                if (excelApp != null && tempWorkbook != null && !string.IsNullOrEmpty(macroPrefix))
+                ReleaseComObject(injectedModule);
+                ReleaseComObject(hostProject);
+                ReleaseComObject(hostWorkbook);
+                ReleaseComObject(excelApp);
+            }
+        }
+
+        private static Excel.Workbook FindWritableHostWorkbook(Excel.Application excelApp)
+        {
+            if (excelApp == null)
+            {
+                return null;
+            }
+
+            Excel.Workbook activeWorkbook = null;
+            Excel.Workbooks openWorkbooks = null;
+
+            try
+            {
+                activeWorkbook = excelApp.ActiveWorkbook;
+                if (CanWriteToVbaProject(activeWorkbook))
                 {
-                    try
-                    {
-                        excelApp.Run(macroPrefix + "RemoveHook");
-                    }
-                    catch { }
+                    return activeWorkbook;
                 }
 
-                try
+                openWorkbooks = excelApp.Workbooks;
+                for (int index = 1; index <= openWorkbooks.Count; index++)
                 {
-                    if (tempWorkbook != null)
-                    {
-                        tempWorkbook.Close(false);
-                    }
-                }
-                catch { }
+                    Excel.Workbook workbook = null;
 
-                if (excelApp != null)
-                {
                     try
                     {
-                        excelApp.DisplayAlerts = previousDisplayAlerts;
+                        workbook = openWorkbooks[index];
+                        if (workbook != null && !SameWorkbook(workbook, activeWorkbook) && CanWriteToVbaProject(workbook))
+                        {
+                            return workbook;
+                        }
                     }
-                    catch { }
+                    catch
+                    {
+                        ReleaseComObject(workbook);
+                    }
                 }
             }
+            finally
+            {
+                ReleaseComObject(openWorkbooks);
+            }
+
+            return null;
+        }
+
+        private static bool CanWriteToVbaProject(Excel.Workbook workbook)
+        {
+            if (workbook == null)
+            {
+                return false;
+            }
+
+            VBProject project = null;
+
+            try
+            {
+                project = workbook.VBProject;
+                return project != null && project.Protection == vbext_ProjectProtection.vbext_pp_none;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                ReleaseComObject(project);
+            }
+        }
+
+        private static bool SameWorkbook(Excel.Workbook left, Excel.Workbook right)
+        {
+            if (left == null || right == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                return string.Equals(left.FullName, right.FullName, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string BuildInjectedModuleName(VBProject project)
+        {
+            string moduleName = TempModuleName;
+            int suffix = 1;
+
+            while (ModuleExists(project, moduleName))
+            {
+                suffix++;
+                moduleName = TempModuleName + suffix;
+            }
+
+            return moduleName;
+        }
+
+        private static bool ModuleExists(VBProject project, string moduleName)
+        {
+            if (project == null || string.IsNullOrWhiteSpace(moduleName))
+            {
+                return false;
+            }
+
+            try
+            {
+                foreach (VBComponent component in project.VBComponents)
+                {
+                    try
+                    {
+                        if (string.Equals(component.Name, moduleName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
+                    }
+                    finally
+                    {
+                        ReleaseComObject(component);
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+
+            return false;
         }
 
         private static string QuoteWorkbookName(string workbookName)
         {
             return "'" + workbookName.Replace("'", "''") + "'!";
+        }
+
+        private static void ReleaseComObject(object comObject)
+        {
+            try
+            {
+                if (comObject is Excel.Application)
+                {
+                    return;
+                }
+
+                if (comObject != null
+                    && RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    && Marshal.IsComObject(comObject))
+                {
+                    Marshal.ReleaseComObject(comObject);
+                }
+            }
+            catch { }
         }
 
         private static string BuildComFailureReason(COMException ex)
@@ -312,9 +385,9 @@ End Function";
             string normalizedInjected = NormalizeCode(injectedCode);
             string normalizedSource = NormalizeCode(HookCode);
 
-            return normalizedInjected == normalizedSource
-                && normalizedInjected.Contains("Sub unprotectVBA()")
-                && normalizedInjected.Contains("Private Function MyDialogBoxParam")
+            return string.Equals(normalizedInjected, normalizedSource, StringComparison.OrdinalIgnoreCase)
+                && normalizedInjected.IndexOf("Sub unprotectVBA()", StringComparison.OrdinalIgnoreCase) >= 0
+                && normalizedInjected.IndexOf("Private Function MyDialogBoxParam", StringComparison.OrdinalIgnoreCase) >= 0
                 && !normalizedInjected.EndsWith("()", StringComparison.Ordinal);
         }
 
@@ -327,159 +400,5 @@ End Function";
                 .Replace("\n", "\r\n");
         }
 
-        private static void PromptAndPatchFile(string suggestedPath)
-        {
-            var warn = MessageBox.Show(
-                "LET OP: Voor de bestandsmethode moet het bestand gesloten zijn in Excel.\n\n" +
-                (string.IsNullOrEmpty(suggestedPath) ? string.Empty : "Actief project:\n" + suggestedPath + "\n\n") +
-                "Sluit het bestand in Excel, klik daarna OK en selecteer het bestand.",
-                "VBA Wachtwoord Verwijderen",
-                MessageBoxButtons.OKCancel,
-                MessageBoxIcon.Warning);
-
-            if (warn != DialogResult.OK)
-            {
-                return;
-            }
-
-            using (OpenFileDialog dlg = new OpenFileDialog())
-            {
-                dlg.Title = "Selecteer het Excel bestand";
-                dlg.Filter = "Excel bestanden (*.xlsm;*.xlam;*.xltm;*.xlsb;*.xls;*.xla)|*.xlsm;*.xlam;*.xltm;*.xlsb;*.xls;*.xla|Alle bestanden (*.*)|*.*";
-
-                if (!string.IsNullOrEmpty(suggestedPath) && File.Exists(suggestedPath))
-                {
-                    dlg.InitialDirectory = Path.GetDirectoryName(suggestedPath);
-                    dlg.FileName = Path.GetFileName(suggestedPath);
-                }
-
-                if (dlg.ShowDialog() != DialogResult.OK)
-                {
-                    return;
-                }
-
-                RemovePasswordFromFile(dlg.FileName);
-            }
-        }
-
-        private static void RemovePasswordFromFile(string filePath)
-        {
-            try
-            {
-                string ext = Path.GetExtension(filePath).ToLower();
-                string backupPath = filePath + ".bak";
-                File.Copy(filePath, backupPath, true);
-
-                if (ext == ".xlsm" || ext == ".xlam" || ext == ".xltm" || ext == ".xlsb")
-                {
-                    RemovePasswordZip(filePath);
-                }
-                else
-                {
-                    RemovePasswordRawBinary(filePath);
-                }
-
-                MessageBox.Show(
-                    "Wachtwoord succesvol via bestandspatch verwijderd.\n\n" +
-                    "Backup opgeslagen als:\n" + backupPath + "\n\n" +
-                    "Open het bestand opnieuw in Excel.\n" +
-                    "Als Excel vraagt of het VBA project gereset moet worden, klik dan op 'Ja'.",
-                    "Geslaagd",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    "Fout bij verwijderen wachtwoord:\n\n" + ex.Message,
-                    "Fout",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-            }
-        }
-
-        private static void RemovePasswordZip(string filePath)
-        {
-            string tempPath = filePath + ".tmp";
-            try
-            {
-                using (var inputStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
-                using (var inputArchive = new ZipArchive(inputStream, ZipArchiveMode.Read))
-                using (var outputStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
-                using (var outputArchive = new ZipArchive(outputStream, ZipArchiveMode.Create))
-                {
-                    foreach (ZipArchiveEntry entry in inputArchive.Entries)
-                    {
-                        byte[] data;
-                        using (var entryStream = entry.Open())
-                        using (var ms = new MemoryStream())
-                        {
-                            entryStream.CopyTo(ms);
-                            data = ms.ToArray();
-                        }
-
-                        if (entry.FullName == "xl/vbaProject.bin")
-                        {
-                            data = PatchDpb(data);
-                        }
-
-                        ZipArchiveEntry newEntry = outputArchive.CreateEntry(entry.FullName, CompressionLevel.Optimal);
-                        newEntry.LastWriteTime = entry.LastWriteTime;
-                        using (var newEntryStream = newEntry.Open())
-                        {
-                            newEntryStream.Write(data, 0, data.Length);
-                        }
-                    }
-                }
-
-                File.Delete(filePath);
-                File.Move(tempPath, filePath);
-            }
-            catch
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-                throw;
-            }
-        }
-
-        private static void RemovePasswordRawBinary(string filePath)
-        {
-            byte[] data = File.ReadAllBytes(filePath);
-            data = PatchDpb(data);
-            File.WriteAllBytes(filePath, data);
-        }
-
-        private static byte[] PatchDpb(byte[] data)
-        {
-            byte[] search = Encoding.ASCII.GetBytes("DPB=\"");
-
-            for (int i = 0; i <= data.Length - search.Length; i++)
-            {
-                bool match = true;
-                for (int j = 0; j < search.Length; j++)
-                {
-                    if (data[i + j] != search[j])
-                    {
-                        match = false;
-                        break;
-                    }
-                }
-
-                if (match)
-                {
-                    data[i + 2] = (byte)'x';
-                    return data;
-                }
-            }
-
-            throw new Exception(
-                "Geen DPB-wachtwoordhash gevonden in het bestand.\n\n" +
-                "Mogelijke oorzaken:\n" +
-                "• Het bestand is niet VBA-wachtwoord beveiligd\n" +
-                "• Het bestandsformaat wordt niet ondersteund");
-        }
     }
 }
