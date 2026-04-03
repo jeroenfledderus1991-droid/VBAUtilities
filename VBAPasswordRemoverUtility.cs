@@ -1,7 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Runtime.InteropServices;
+using System.IO.Compression;
 using System.Text;
 using System.Windows.Forms;
 using Microsoft.Vbe.Interop;
@@ -9,157 +8,70 @@ using Microsoft.Vbe.Interop;
 namespace VBEAddIn
 {
     /// <summary>
-    /// Utility om VBA project wachtwoorden te verwijderen via een VBA macro snippet.
-    /// De methode injecteert tijdelijk een module in het actieve project dat de
-    /// hook-gebaseerde unlock procedure bevat, voert deze uit, en verwijdert de module daarna.
+    /// Verwijdert VBA project wachtwoorden door de DPB-hash in vbaProject.bin te patchen.
+    /// Het bestand moet GESLOTEN zijn in Excel voordat dit werkt.
+    /// Na heropenen vraagt Excel om het project te resetten (klik Ja).
     /// </summary>
     public static class VBAPasswordRemoverUtility
     {
-        private const string TempModuleName = "_TempUnlocker";
-
-        /// <summary>
-        /// VBA code die de hook-techniek gebruikt om het wachtwoord van het huidige project te verwijderen.
-        /// </summary>
-        private static readonly string VbaUnlockCode = @"
-Option Explicit
-
-Private Const PAGE_EXECUTE_READWRITE = &H40
-
-Private Declare PtrSafe Sub MoveMemory Lib ""kernel32"" Alias ""RtlMoveMemory"" _
-    (Destination As LongPtr, Source As LongPtr, ByVal Length As LongPtr)
-Private Declare PtrSafe Function VirtualProtect Lib ""kernel32"" (lpAddress As LongPtr, _
-    ByVal dwSize As LongPtr, ByVal flNewProtect As LongPtr, lpflOldProtect As LongPtr) As LongPtr
-Private Declare PtrSafe Function GetModuleHandleA Lib ""kernel32"" (ByVal lpModuleName As String) As LongPtr
-Private Declare PtrSafe Function GetProcAddress Lib ""kernel32"" (ByVal hModule As LongPtr, _
-    ByVal lpProcName As String) As LongPtr
-Private Declare PtrSafe Function DialogBoxParam Lib ""user32"" Alias ""DialogBoxParamA"" (ByVal hInstance As LongPtr, _
-    ByVal pTemplateName As LongPtr, ByVal hwndParent As LongPtr, _
-    ByVal lpDialogFunc As LongPtr, ByVal dwInitParam As LongPtr) As Integer
-
-Dim HookBytes(0 To 11) As Byte
-Dim OriginBytes(0 To 11) As Byte
-Dim pFunc As LongPtr
-Dim Flag As Boolean
-
-Sub RunUnlocker()
-    If Hook() Then
-        MsgBox ""VBA Project is unprotected!"", vbInformation, String(Len(""VBA Project is unprotected!"") * 1.5, ""*"")
-    End If
-End Sub
-
-Private Function GetPtr(ByVal Value As LongPtr) As LongPtr
-    GetPtr = Value
-End Function
-
-Public Sub RecoverBytes()
-    If Flag Then MoveMemory ByVal pFunc, ByVal VarPtr(OriginBytes(0)), 12
-End Sub
-
-Public Function Hook() As Boolean
-    Dim TmpBytes(0 To 11) As Byte
-    Dim p As LongPtr, osi As Byte
-    Dim OriginProtect As LongPtr
-
-    Hook = False
-
-    #If Win64 Then
-    osi = 1
-    #Else
-    osi = 0
-    #End If
-
-    pFunc = GetProcAddress(GetModuleHandleA(""user32.dll""), ""DialogBoxParamA"")
-    If VirtualProtect(ByVal pFunc, 12, PAGE_EXECUTE_READWRITE, OriginProtect) <> 0 Then
-        MoveMemory ByVal VarPtr(TmpBytes(0)), ByVal pFunc, osi + 1
-        If TmpBytes(osi) <> &HB8 Then
-            MoveMemory ByVal VarPtr(OriginBytes(0)), ByVal pFunc, 12
-            p = GetPtr(AddressOf MyDialogBoxParam)
-            If osi Then HookBytes(0) = &H48
-            HookBytes(osi) = &HB8
-            osi = osi + 1
-            MoveMemory ByVal VarPtr(HookBytes(osi)), ByVal VarPtr(p), 4 * osi
-            HookBytes(osi + 4 * osi) = &HFF
-            HookBytes(osi + 4 * osi + 1) = &HE0
-            MoveMemory ByVal pFunc, ByVal VarPtr(HookBytes(0)), 12
-            Flag = True
-            Hook = True
-        End If
-    End If
-End Function
-
-Private Function MyDialogBoxParam(ByVal hInstance As LongPtr, _
-    ByVal pTemplateName As LongPtr, ByVal hwndParent As LongPtr, _
-    ByVal lpDialogFunc As LongPtr, ByVal dwInitParam As LongPtr) As Integer
-    If pTemplateName = 4070 Then
-        MyDialogBoxParam = 1
-    Else
-        RecoverBytes
-        MyDialogBoxParam = DialogBoxParam(hInstance, pTemplateName, _
-            hwndParent, lpDialogFunc, dwInitParam)
-        Hook
-    End If
-End Function
-";
-
-        /// <summary>
-        /// Injecteert een tijdelijk VBA-module in het actieve VBProject, voert de unlock-macro uit,
-        /// en verwijdert de module daarna weer.
-        /// </summary>
         public static void Execute(VBE vbe)
         {
-            VBProject project = null;
-            VBComponent tempModule = null;
-
+            string suggestedPath = "";
             try
             {
-                if (vbe == null || vbe.ActiveVBProject == null)
-                {
-                    MessageBox.Show(
-                        "Geen actief VBA project gevonden.",
-                        "VBA Wachtwoord Verwijderen",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning);
-                    return;
-                }
-
-                project = vbe.ActiveVBProject;
-
-                // Check of het project überhaupt bereikbaar is (b.v. vergrendeld maar leesbaar voor injectie)
-                try
-                {
-                    var _ = project.Name;
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(
-                        "Het VBA project is niet beschikbaar:\n\n" + ex.Message,
-                        "VBA Wachtwoord Verwijderen",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error);
-                    return;
-                }
-
-                // Verwijder bestaande temp module als die nog bestaat
-                RemoveTempModule(project);
-
-                // Voeg tijdelijke module toe
-                tempModule = project.VBComponents.Add(vbext_ComponentType.vbext_ct_StdModule);
-                tempModule.Name = TempModuleName;
-                tempModule.CodeModule.AddFromString(VbaUnlockCode);
-
-                // Voer de unlock macro uit via Excel Application.Run
-                var excelApp = (Microsoft.Office.Interop.Excel.Application)Marshal.GetActiveObject("Excel.Application");
-                excelApp.Run(project.Name + "." + TempModuleName + ".RunUnlocker");
+                if (vbe?.ActiveVBProject != null)
+                    suggestedPath = vbe.ActiveVBProject.FileName;
             }
-            catch (COMException comEx) when (comEx.HResult == unchecked((int)0x800A03EC))
+            catch { }
+
+            var warn = MessageBox.Show(
+                "LET OP: Het bestand moet GESLOTEN zijn in Excel voordat het wachtwoord verwijderd kan worden.\n\n" +
+                (string.IsNullOrEmpty(suggestedPath) ? "" : "Actief project:\n" + suggestedPath + "\n\n") +
+                "Sluit het bestand in Excel, klik daarna OK en selecteer het bestand.",
+                "VBA Wachtwoord Verwijderen",
+                MessageBoxButtons.OKCancel,
+                MessageBoxIcon.Warning);
+
+            if (warn != DialogResult.OK) return;
+
+            using (OpenFileDialog dlg = new OpenFileDialog())
             {
+                dlg.Title = "Selecteer het Excel bestand";
+                dlg.Filter = "Excel bestanden (*.xlsm;*.xlam;*.xltm;*.xlsb;*.xls;*.xla)|*.xlsm;*.xlam;*.xltm;*.xlsb;*.xls;*.xla|Alle bestanden (*.*)|*.*";
+
+                if (!string.IsNullOrEmpty(suggestedPath) && File.Exists(suggestedPath))
+                {
+                    dlg.InitialDirectory = Path.GetDirectoryName(suggestedPath);
+                    dlg.FileName = Path.GetFileName(suggestedPath);
+                }
+
+                if (dlg.ShowDialog() != DialogResult.OK) return;
+
+                RemovePassword(dlg.FileName);
+            }
+        }
+
+        private static void RemovePassword(string filePath)
+        {
+            try
+            {
+                string ext = Path.GetExtension(filePath).ToLower();
+                string backupPath = filePath + ".bak";
+                File.Copy(filePath, backupPath, true);
+
+                if (ext == ".xlsm" || ext == ".xlam" || ext == ".xltm" || ext == ".xlsb")
+                    RemovePasswordZip(filePath);
+                else
+                    RemovePasswordRawBinary(filePath);
+
                 MessageBox.Show(
-                    "Het VBA project is wachtwoord-beveiligd.\n\n" +
-                    "Zorg dat het project open is (verwijder het wachtwoord handmatig via Tools > VBAProject Properties) " +
-                    "of gebruik de hook-methode in een unlocked project.",
-                    "Project Vergrendeld",
+                    "Wachtwoord succesvol verwijderd!\n\n" +
+                    "Backup opgeslagen als:\n" + backupPath + "\n\n" +
+                    "Open het bestand nu weer in Excel.\n" +
+                    "Als Excel vraagt of het VBA project gereset moet worden, klik dan op 'Ja'.",
+                    "Geslaagd",
                     MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
@@ -169,30 +81,88 @@ End Function
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
             }
-            finally
+        }
+
+        /// <summary>
+        /// Voor ZIP-gebaseerde bestanden (.xlsm, .xlam, .xlsb): patch vbaProject.bin in het archief.
+        /// </summary>
+        private static void RemovePasswordZip(string filePath)
+        {
+            string tempPath = filePath + ".tmp";
+            try
             {
-                // Verwijder altijd de temp module
-                if (project != null)
+                using (var inputStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+                using (var inputArchive = new ZipArchive(inputStream, ZipArchiveMode.Read))
+                using (var outputStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
+                using (var outputArchive = new ZipArchive(outputStream, ZipArchiveMode.Create))
                 {
-                    RemoveTempModule(project);
+                    foreach (ZipArchiveEntry entry in inputArchive.Entries)
+                    {
+                        byte[] data;
+                        using (var entryStream = entry.Open())
+                        using (var ms = new MemoryStream())
+                        {
+                            entryStream.CopyTo(ms);
+                            data = ms.ToArray();
+                        }
+
+                        if (entry.FullName == "xl/vbaProject.bin")
+                            data = PatchDpb(data);
+
+                        ZipArchiveEntry newEntry = outputArchive.CreateEntry(entry.FullName, CompressionLevel.Optimal);
+                        newEntry.LastWriteTime = entry.LastWriteTime;
+                        using (var newEntryStream = newEntry.Open())
+                            newEntryStream.Write(data, 0, data.Length);
+                    }
                 }
+
+                File.Delete(filePath);
+                File.Move(tempPath, filePath);
+            }
+            catch
+            {
+                if (File.Exists(tempPath)) File.Delete(tempPath);
+                throw;
             }
         }
 
-        private static void RemoveTempModule(VBProject project)
+        /// <summary>
+        /// Voor binaire .xls/.xla bestanden: zoek DPB= direct in de bestandsbytes.
+        /// </summary>
+        private static void RemovePasswordRawBinary(string filePath)
         {
-            try
+            byte[] data = File.ReadAllBytes(filePath);
+            data = PatchDpb(data);
+            File.WriteAllBytes(filePath, data);
+        }
+
+        /// <summary>
+        /// Vervangt "DPB=" door "DPx=" zodat Excel de wachtwoord-hash negeert.
+        /// </summary>
+        private static byte[] PatchDpb(byte[] data)
+        {
+            // Search for: DPB="
+            byte[] search = Encoding.ASCII.GetBytes("DPB=\"");
+
+            for (int i = 0; i <= data.Length - search.Length; i++)
             {
-                foreach (VBComponent comp in project.VBComponents)
+                bool match = true;
+                for (int j = 0; j < search.Length; j++)
                 {
-                    if (comp.Name == TempModuleName)
-                    {
-                        project.VBComponents.Remove(comp);
-                        break;
-                    }
+                    if (data[i + j] != search[j]) { match = false; break; }
+                }
+                if (match)
+                {
+                    data[i + 2] = (byte)'x'; // DPB= → DPx=
+                    return data;
                 }
             }
-            catch { }
+
+            throw new Exception(
+                "Geen DPB-wachtwoordhash gevonden in het bestand.\n\n" +
+                "Mogelijke oorzaken:\n" +
+                "• Het bestand is niet VBA-wachtwoord beveiligd\n" +
+                "• Het bestandsformaat wordt niet ondersteund");
         }
     }
 }
