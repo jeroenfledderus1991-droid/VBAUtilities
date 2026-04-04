@@ -2,7 +2,7 @@ namespace VBEAddIn
 {
     internal static class ChangelogData
     {
-        internal const string CurrentVersion = "1.3.2";
+        internal const string CurrentVersion = "1.3.0";
 
         // -----------------------------------------------------------------------
         // AGENT INSTRUCTIE: Bij elke nieuwe release voeg je een nieuw item toe
@@ -15,12 +15,6 @@ namespace VBEAddIn
         // -----------------------------------------------------------------------
         internal static readonly ChangelogEntry[] Entries = new[]
         {
-            new ChangelogEntry("1.3.2", "2026-04-04", new[]
-            {
-                "* Fix: update-check draait nu vanuit OnConnection (werkt betrouwbaar in VBE)",
-                "* Fix: directe installer download via GitHub Releases asset (in plaats van tagpagina)",
-                "* Verbetering: versieverificatie duidelijker via zichtbare changelogversie",
-            }),
             new ChangelogEntry("1.3.0", "2026-04-04", new[]
             {
                 "+ VBA Wachtwoord Verwijderen — bypass VBA projectwachtwoord via DialogBoxParamA API hooking",

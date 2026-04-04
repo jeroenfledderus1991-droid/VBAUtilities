@@ -49,9 +49,7 @@ namespace VBEAddIn
         private CommandBarButton _cmdExportVBA;
         private CommandBarButton _cmdReferenceManager;
         private CommandBarButton _cmdCodeLibrary;
-        private CommandBarButton _cmdExportToLibrary;
         private CommandBarButton _cmdInsertComment;
-        private CommandBarButton _cmdPasswordRemover;
 
         public Connect()
         {
@@ -773,9 +771,7 @@ namespace VBEAddIn
                 _cmdExportVBA = null;
                 _cmdReferenceManager = null;
                 _cmdCodeLibrary = null;
-                _cmdExportToLibrary = null;
                 _cmdInsertComment = null;
-                _cmdPasswordRemover = null;
             }
             catch (Exception ex)
             {
