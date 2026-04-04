@@ -1203,9 +1203,10 @@ namespace VBEAddIn
 
                 string latest;
                 string releaseUrl;
+                string installerUrl;
                 string failureReason;
 
-                if (!GitHubReleaseChecker.TryGetLatestRelease(out latest, out releaseUrl, out failureReason))
+                if (!GitHubReleaseChecker.TryGetLatestRelease(out latest, out releaseUrl, out installerUrl, out failureReason))
                 {
                     WriteDebug("GitHub update-check overgeslagen: " + failureReason);
                     return;
@@ -1235,7 +1236,7 @@ namespace VBEAddIn
                     "Er is een nieuwe versie beschikbaar op GitHub." + Environment.NewLine +
                     "Huidige versie: " + current + Environment.NewLine +
                     "Nieuwste versie: " + latest + Environment.NewLine + Environment.NewLine +
-                    "Ja = open releasepagina" + Environment.NewLine +
+                    "Ja = download installer" + Environment.NewLine +
                     "Nee = niet opnieuw tonen voor versie " + latest + Environment.NewLine +
                     "Annuleren = herinner me over " + remindEveryDays + " dagen",
                     "Update beschikbaar",
@@ -1248,9 +1249,10 @@ namespace VBEAddIn
 
                 if (result == System.Windows.Forms.DialogResult.Yes)
                 {
-                    if (!string.IsNullOrWhiteSpace(releaseUrl))
+                    string urlToOpen = !string.IsNullOrWhiteSpace(installerUrl) ? installerUrl : releaseUrl;
+                    if (!string.IsNullOrWhiteSpace(urlToOpen))
                     {
-                        Process.Start(releaseUrl);
+                        Process.Start(urlToOpen);
                     }
 
                     FormatterSettings.SaveToRegistry();

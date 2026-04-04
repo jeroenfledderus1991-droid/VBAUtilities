@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Text.RegularExpressions;
 
 namespace VBEAddIn
 {
@@ -8,10 +9,11 @@ namespace VBEAddIn
     {
         private const string LatestReleaseApiUrl = "https://api.github.com/repos/jeroenfledderus1991-droid/VBAUtilities/releases/latest";
 
-        internal static bool TryGetLatestRelease(out string version, out string releaseUrl, out string failureReason)
+        internal static bool TryGetLatestRelease(out string version, out string releaseUrl, out string installerUrl, out string failureReason)
         {
             version = string.Empty;
             releaseUrl = string.Empty;
+            installerUrl = string.Empty;
             failureReason = string.Empty;
 
             try
@@ -31,6 +33,7 @@ namespace VBEAddIn
                     string json = reader.ReadToEnd();
                     string tag = ExtractJsonStringValue(json, "tag_name");
                     releaseUrl = ExtractJsonStringValue(json, "html_url");
+                    installerUrl = ExtractPreferredInstallerUrl(json);
 
                     if (string.IsNullOrWhiteSpace(tag))
                     {
@@ -135,6 +138,47 @@ namespace VBEAddIn
             return json.Substring(firstQuote + 1, secondQuote - firstQuote - 1)
                 .Replace("\\/", "/")
                 .Replace("\\\"", "\"");
+        }
+
+        private static string ExtractPreferredInstallerUrl(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return string.Empty;
+            }
+
+            string firstExeOrMsi = string.Empty;
+            MatchCollection matches = Regex.Matches(
+                json,
+                "\\\"browser_download_url\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"",
+                RegexOptions.IgnoreCase);
+
+            foreach (Match match in matches)
+            {
+                if (match.Groups.Count < 2)
+                {
+                    continue;
+                }
+
+                string url = match.Groups[1].Value
+                    .Replace("\\/", "/")
+                    .Replace("\\\"", "\"");
+
+                string lower = url.ToLowerInvariant();
+                bool isInstallerFile = lower.EndsWith(".exe") || lower.EndsWith(".msi");
+
+                if (isInstallerFile && string.IsNullOrWhiteSpace(firstExeOrMsi))
+                {
+                    firstExeOrMsi = url;
+                }
+
+                if (isInstallerFile && lower.Contains("installer"))
+                {
+                    return url;
+                }
+            }
+
+            return firstExeOrMsi;
         }
     }
 }
