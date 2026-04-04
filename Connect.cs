@@ -33,6 +33,7 @@ namespace VBEAddIn
         private CommandBarButton _menuButtonExportToLibrary;
         private CommandBarButton _menuButtonInsertComment;
         private CommandBarButton _menuButtonPasswordRemover;
+        private CommandBarButton _menuButtonChangelog;
         private CommandBarPopup _utilitiesMenu;
         private CommandBarPopup _formattingMenu;
         
@@ -475,7 +476,25 @@ namespace VBEAddIn
 
                 _menuButtonPasswordRemover.Click += new _CommandBarButtonEvents_ClickEventHandler(OnMenuButtonPasswordRemoverClick);
                 WriteDebug("Event handler gekoppeld voor Password Remover");
-                
+
+                // Versiegeschiedenis button
+                _menuButtonChangelog = (CommandBarButton)_utilitiesMenu.Controls.Add(
+                    Type: MsoControlType.msoControlButton,
+                    Id: Type.Missing,
+                    Parameter: Type.Missing,
+                    Before: Type.Missing,
+                    Temporary: true);
+
+                _menuButtonChangelog.Caption = "Versiegeschiedenis";
+                _menuButtonChangelog.Tag = "VBEAddIn_Changelog";
+                _menuButtonChangelog.TooltipText = "Toon versiegeschiedenis van de add-in (v" + ChangelogData.CurrentVersion + ")";
+                _menuButtonChangelog.Style = MsoButtonStyle.msoButtonIconAndCaption;
+
+                try { _menuButtonChangelog.FaceId = 433; } catch { }
+
+                _menuButtonChangelog.Click += new _CommandBarButtonEvents_ClickEventHandler(OnMenuButtonChangelogClick);
+                WriteDebug("Event handler gekoppeld voor Versiegeschiedenis");
+
                 WriteDebug("=== CreateMenuButton SUCCESS ===");
             }
             catch (Exception ex)
@@ -819,6 +838,11 @@ namespace VBEAddIn
                     _menuButtonPasswordRemover.Delete(true);
                     _menuButtonPasswordRemover = null;
                 }
+                if (_menuButtonChangelog != null)
+                {
+                    _menuButtonChangelog.Delete(true);
+                    _menuButtonChangelog = null;
+                }
                 if (_formattingMenu != null)
                 {
                     _formattingMenu.Delete(true);
@@ -897,6 +921,11 @@ namespace VBEAddIn
         private void OnMenuButtonPasswordRemoverClick(CommandBarButton Ctrl, ref bool CancelDefault)
         {
             RemoveVBAPassword();
+        }
+
+        private void OnMenuButtonChangelogClick(CommandBarButton Ctrl, ref bool CancelDefault)
+        {
+            ShowChangelog();
         }
 
         #endregion
@@ -1089,6 +1118,26 @@ namespace VBEAddIn
         public void RemoveVBAPassword()
         {
             VBAPasswordRemoverUtility.Execute(_vbe);
+        }
+
+        /// <summary>
+        /// Toon de versiegeschiedenis van de add-in
+        /// </summary>
+        [ComVisible(true)]
+        public void ShowChangelog()
+        {
+            try
+            {
+                new ChangelogForm().ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                System.Windows.Forms.MessageBox.Show(
+                    "Fout bij openen versiegeschiedenis: " + ex.Message,
+                    "Fout",
+                    System.Windows.Forms.MessageBoxButtons.OK,
+                    System.Windows.Forms.MessageBoxIcon.Error);
+            }
         }
 
         #endregion
