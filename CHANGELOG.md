@@ -4,6 +4,13 @@ Alle noemenswaardige wijzigingen worden bijgehouden in dit bestand.
 Formaat gebaseerd op [Keep a Changelog](https://keepachangelog.com/nl/1.0.0/).
 
 ---
+## [1.3.1] — 2026-04-04
+
+### Toegevoegd
+- **Testrelease 1.3.1** — interne testversie voor versiebeheer en distributiecontrole
+
+---
+
 ## [1.3.0] — 2026-04-04
 
 ### Toegevoegd
