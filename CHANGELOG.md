@@ -5,6 +5,15 @@ Formaat gebaseerd op [Keep a Changelog](https://keepachangelog.com/nl/1.0.0/).
 
 ---
 
+## [1.3.2] — 2026-04-04
+
+### Fixes
+- Update-check wordt nu betrouwbaar uitgevoerd vanuit `OnConnection` (werkt in VBE-sessie)
+- Bij een GitHub Release met installer-asset opent `Ja` nu direct de installer-download
+- Zichtbare versie in de add-in bijgewerkt naar **1.3.2**
+
+---
+
 ## [1.3.0] — 2026-04-04
 
 ### Toegevoegd
