@@ -8,6 +8,7 @@ namespace VBEAddIn
     internal static class GitHubReleaseChecker
     {
         private const string LatestReleaseApiUrl = "https://api.github.com/repos/jeroenfledderus1991-droid/VBAUtilities/releases/latest";
+        private const string LatestTagApiUrl = "https://api.github.com/repos/jeroenfledderus1991-droid/VBAUtilities/tags?per_page=1";
 
         internal static bool TryGetLatestRelease(out string version, out string releaseUrl, out string installerUrl, out string failureReason)
         {
@@ -50,6 +51,18 @@ namespace VBEAddIn
 
                     return true;
                 }
+            }
+            catch (WebException ex)
+            {
+                HttpWebResponse response = ex.Response as HttpWebResponse;
+                if (response != null && response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    // Fallback: als er nog geen GitHub Release bestaat, gebruik de nieuwste tag.
+                    return TryGetLatestTag(out version, out releaseUrl, out installerUrl, out failureReason);
+                }
+
+                failureReason = ex.Message;
+                return false;
             }
             catch (Exception ex)
             {
@@ -138,6 +151,48 @@ namespace VBEAddIn
             return json.Substring(firstQuote + 1, secondQuote - firstQuote - 1)
                 .Replace("\\/", "/")
                 .Replace("\\\"", "\"");
+        }
+
+        private static bool TryGetLatestTag(out string version, out string releaseUrl, out string installerUrl, out string failureReason)
+        {
+            version = string.Empty;
+            releaseUrl = string.Empty;
+            installerUrl = string.Empty;
+            failureReason = string.Empty;
+
+            try
+            {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(LatestTagApiUrl);
+                request.Method = "GET";
+                request.Accept = "application/vnd.github+json";
+                request.UserAgent = "VBEAddIn/1.0";
+                request.Timeout = 2500;
+                request.ReadWriteTimeout = 2500;
+
+                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                using (StreamReader reader = new StreamReader(response.GetResponseStream()))
+                {
+                    string json = reader.ReadToEnd();
+                    Match match = Regex.Match(json, "\\\"name\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"", RegexOptions.IgnoreCase);
+                    if (!match.Success || match.Groups.Count < 2)
+                    {
+                        failureReason = "Geen tag gevonden via GitHub tags API.";
+                        return false;
+                    }
+
+                    string tag = match.Groups[1].Value;
+                    version = NormalizeTagToVersion(tag);
+                    releaseUrl = "https://github.com/jeroenfledderus1991-droid/VBAUtilities/tree/" + tag;
+                    return !string.IsNullOrWhiteSpace(version);
+                }
+            }
+            catch (Exception ex)
+            {
+                failureReason = ex.Message;
+                return false;
+            }
         }
 
         private static string ExtractPreferredInstallerUrl(string json)
