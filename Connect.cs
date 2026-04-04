@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Reflection;
+using System.Diagnostics;
 using Extensibility;
 using Microsoft.Vbe.Interop;
 using Microsoft.Office.Core;
@@ -116,6 +117,7 @@ namespace VBEAddIn
         public void OnStartupComplete(ref Array custom)
         {
             CheckForNewVersion();
+            CheckForGitHubUpdate();
         }
 
         public void OnBeginShutdown(ref Array custom)
@@ -1186,6 +1188,66 @@ namespace VBEAddIn
             catch (Exception ex)
             {
                 WriteDebug("CheckForNewVersion fout: " + ex.Message);
+            }
+        }
+
+        private void CheckForGitHubUpdate()
+        {
+            try
+            {
+                string current = ChangelogData.CurrentVersion;
+                string ignored = FormatterSettings.IgnoredGitHubVersion;
+
+                string latest;
+                string releaseUrl;
+                string failureReason;
+
+                if (!GitHubReleaseChecker.TryGetLatestRelease(out latest, out releaseUrl, out failureReason))
+                {
+                    WriteDebug("GitHub update-check overgeslagen: " + failureReason);
+                    return;
+                }
+
+                if (!GitHubReleaseChecker.IsRemoteNewer(current, latest))
+                {
+                    return;
+                }
+
+                if (string.Equals(ignored, latest, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                System.Windows.Forms.DialogResult result = System.Windows.Forms.MessageBox.Show(
+                    "Er is een nieuwe versie beschikbaar op GitHub." + Environment.NewLine +
+                    "Huidige versie: " + current + Environment.NewLine +
+                    "Nieuwste versie: " + latest + Environment.NewLine + Environment.NewLine +
+                    "Ja = open releasepagina" + Environment.NewLine +
+                    "Nee = niet opnieuw tonen voor versie " + latest + Environment.NewLine +
+                    "Annuleren = later opnieuw vragen",
+                    "Update beschikbaar",
+                    System.Windows.Forms.MessageBoxButtons.YesNoCancel,
+                    System.Windows.Forms.MessageBoxIcon.Information);
+
+                if (result == System.Windows.Forms.DialogResult.Yes)
+                {
+                    if (!string.IsNullOrWhiteSpace(releaseUrl))
+                    {
+                        Process.Start(releaseUrl);
+                    }
+
+                    FormatterSettings.IgnoredGitHubVersion = latest;
+                    FormatterSettings.SaveToRegistry();
+                }
+                else if (result == System.Windows.Forms.DialogResult.No)
+                {
+                    FormatterSettings.IgnoredGitHubVersion = latest;
+                    FormatterSettings.SaveToRegistry();
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteDebug("CheckForGitHubUpdate fout: " + ex.Message);
             }
         }
 

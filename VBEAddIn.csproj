@@ -77,6 +77,7 @@
     <Compile Include="ReferenceManagerUtility.cs" />
     <Compile Include="InsertCommentUtility.cs" />
     <Compile Include="VBAPasswordRemoverUtility.cs" />
+    <Compile Include="GitHubReleaseChecker.cs" />
     <Compile Include="ChangelogData.cs" />
     <Compile Include="ChangelogForm.cs" />
     <Compile Include="WhatsNewForm.cs" />

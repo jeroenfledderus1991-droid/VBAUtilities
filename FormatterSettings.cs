@@ -210,6 +210,11 @@ namespace VBEAddIn
         public static string LastSeenVersion = string.Empty;
 
         /// <summary>
+        /// GitHub versie die de gebruiker niet opnieuw wil zien als update-melding.
+        /// </summary>
+        public static string IgnoredGitHubVersion = string.Empty;
+
+        /// <summary>
         /// Laad settings uit registry
         /// </summary>
         public static void LoadFromRegistry()
@@ -274,6 +279,7 @@ namespace VBEAddIn
 
                         // Versienotificatie
                         LastSeenVersion = (string)key.GetValue("LastSeenVersion", "");
+                        IgnoredGitHubVersion = (string)key.GetValue("IgnoredGitHubVersion", "");
                     }
                 }
             }
@@ -334,6 +340,7 @@ namespace VBEAddIn
 
                         // Versienotificatie
                         key.SetValue("LastSeenVersion", LastSeenVersion, Microsoft.Win32.RegistryValueKind.String);
+                        key.SetValue("IgnoredGitHubVersion", IgnoredGitHubVersion, Microsoft.Win32.RegistryValueKind.String);
                     }
                 }
             }
