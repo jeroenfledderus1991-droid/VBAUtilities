@@ -1195,8 +1195,11 @@ namespace VBEAddIn
         {
             try
             {
+                const int remindEveryDays = 7;
                 string current = ChangelogData.CurrentVersion;
                 string ignored = FormatterSettings.IgnoredGitHubVersion;
+                string lastPromptVersion = FormatterSettings.LastGitHubPromptVersion;
+                string lastPromptUtcRaw = FormatterSettings.LastGitHubPromptUtc;
 
                 string latest;
                 string releaseUrl;
@@ -1218,16 +1221,30 @@ namespace VBEAddIn
                     return;
                 }
 
+                DateTime lastPromptUtc;
+                if (string.Equals(lastPromptVersion, latest, StringComparison.OrdinalIgnoreCase)
+                    && DateTime.TryParse(lastPromptUtcRaw, null, System.Globalization.DateTimeStyles.RoundtripKind, out lastPromptUtc))
+                {
+                    if ((DateTime.UtcNow - lastPromptUtc).TotalDays < remindEveryDays)
+                    {
+                        return;
+                    }
+                }
+
                 System.Windows.Forms.DialogResult result = System.Windows.Forms.MessageBox.Show(
                     "Er is een nieuwe versie beschikbaar op GitHub." + Environment.NewLine +
                     "Huidige versie: " + current + Environment.NewLine +
                     "Nieuwste versie: " + latest + Environment.NewLine + Environment.NewLine +
                     "Ja = open releasepagina" + Environment.NewLine +
                     "Nee = niet opnieuw tonen voor versie " + latest + Environment.NewLine +
-                    "Annuleren = later opnieuw vragen",
+                    "Annuleren = herinner me over " + remindEveryDays + " dagen",
                     "Update beschikbaar",
                     System.Windows.Forms.MessageBoxButtons.YesNoCancel,
                     System.Windows.Forms.MessageBoxIcon.Information);
+
+                // Registreer dat deze versie nu getoond is.
+                FormatterSettings.LastGitHubPromptVersion = latest;
+                FormatterSettings.LastGitHubPromptUtc = DateTime.UtcNow.ToString("o");
 
                 if (result == System.Windows.Forms.DialogResult.Yes)
                 {
@@ -1236,12 +1253,15 @@ namespace VBEAddIn
                         Process.Start(releaseUrl);
                     }
 
-                    FormatterSettings.IgnoredGitHubVersion = latest;
                     FormatterSettings.SaveToRegistry();
                 }
                 else if (result == System.Windows.Forms.DialogResult.No)
                 {
                     FormatterSettings.IgnoredGitHubVersion = latest;
+                    FormatterSettings.SaveToRegistry();
+                }
+                else
+                {
                     FormatterSettings.SaveToRegistry();
                 }
             }

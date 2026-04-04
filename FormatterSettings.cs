@@ -215,6 +215,16 @@ namespace VBEAddIn
         public static string IgnoredGitHubVersion = string.Empty;
 
         /// <summary>
+        /// Laatste GitHub versie waarvoor een update-melding is getoond.
+        /// </summary>
+        public static string LastGitHubPromptVersion = string.Empty;
+
+        /// <summary>
+        /// UTC timestamp van de laatste GitHub update-melding (ISO-8601).
+        /// </summary>
+        public static string LastGitHubPromptUtc = string.Empty;
+
+        /// <summary>
         /// Laad settings uit registry
         /// </summary>
         public static void LoadFromRegistry()
@@ -280,6 +290,8 @@ namespace VBEAddIn
                         // Versienotificatie
                         LastSeenVersion = (string)key.GetValue("LastSeenVersion", "");
                         IgnoredGitHubVersion = (string)key.GetValue("IgnoredGitHubVersion", "");
+                        LastGitHubPromptVersion = (string)key.GetValue("LastGitHubPromptVersion", "");
+                        LastGitHubPromptUtc = (string)key.GetValue("LastGitHubPromptUtc", "");
                     }
                 }
             }
@@ -341,6 +353,8 @@ namespace VBEAddIn
                         // Versienotificatie
                         key.SetValue("LastSeenVersion", LastSeenVersion, Microsoft.Win32.RegistryValueKind.String);
                         key.SetValue("IgnoredGitHubVersion", IgnoredGitHubVersion, Microsoft.Win32.RegistryValueKind.String);
+                        key.SetValue("LastGitHubPromptVersion", LastGitHubPromptVersion, Microsoft.Win32.RegistryValueKind.String);
+                        key.SetValue("LastGitHubPromptUtc", LastGitHubPromptUtc, Microsoft.Win32.RegistryValueKind.String);
                     }
                 }
             }
