@@ -204,6 +204,12 @@ namespace VBEAddIn
         private const string RegistryPath = @"Software\VBEAddIn\Settings";
 
         /// <summary>
+        /// Laatste versie die de gebruiker heeft gezien bij opstarten.
+        /// Wordt gebruikt om de "Wat is er nieuw?" melding te tonen.
+        /// </summary>
+        public static string LastSeenVersion = string.Empty;
+
+        /// <summary>
         /// Laad settings uit registry
         /// </summary>
         public static void LoadFromRegistry()
@@ -265,6 +271,9 @@ namespace VBEAddIn
                         }
 
                         // DimTypeSortOrder wordt niet in registry opgeslagen (te complex)
+
+                        // Versienotificatie
+                        LastSeenVersion = (string)key.GetValue("LastSeenVersion", "");
                     }
                 }
             }
@@ -322,6 +331,9 @@ namespace VBEAddIn
                         // Code Library settings
                         string pathsData = string.Join("|", CodeLibraryPaths.ToArray());
                         key.SetValue("CodeLibraryPaths", pathsData, Microsoft.Win32.RegistryValueKind.String);
+
+                        // Versienotificatie
+                        key.SetValue("LastSeenVersion", LastSeenVersion, Microsoft.Win32.RegistryValueKind.String);
                     }
                 }
             }

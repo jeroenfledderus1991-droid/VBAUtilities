@@ -115,6 +115,7 @@ namespace VBEAddIn
 
         public void OnStartupComplete(ref Array custom)
         {
+            CheckForNewVersion();
         }
 
         public void OnBeginShutdown(ref Array custom)
@@ -1148,6 +1149,44 @@ namespace VBEAddIn
         {
             // Alleen schrijven naar debug output (geen SendKeys meer)
             System.Diagnostics.Debug.WriteLine(message);
+        }
+
+        private void CheckForNewVersion()
+        {
+            try
+            {
+                string current = ChangelogData.CurrentVersion;
+                string lastSeen = FormatterSettings.LastSeenVersion;
+
+                if (string.Equals(current, lastSeen, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                // Zoek de entry voor de huidige versie
+                ChangelogEntry entry = null;
+                foreach (ChangelogEntry e in ChangelogData.Entries)
+                {
+                    if (string.Equals(e.Version, current, StringComparison.OrdinalIgnoreCase))
+                    {
+                        entry = e;
+                        break;
+                    }
+                }
+
+                if (entry != null)
+                {
+                    new WhatsNewForm(entry).Show();
+                }
+
+                // Markeer als gezien en sla op
+                FormatterSettings.LastSeenVersion = current;
+                FormatterSettings.SaveToRegistry();
+            }
+            catch (Exception ex)
+            {
+                WriteDebug("CheckForNewVersion fout: " + ex.Message);
+            }
         }
 
         #endregion

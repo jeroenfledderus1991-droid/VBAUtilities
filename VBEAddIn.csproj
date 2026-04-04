@@ -79,6 +79,7 @@
     <Compile Include="VBAPasswordRemoverUtility.cs" />
     <Compile Include="ChangelogData.cs" />
     <Compile Include="ChangelogForm.cs" />
+    <Compile Include="WhatsNewForm.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
