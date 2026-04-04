@@ -78,6 +78,14 @@ namespace VBEAddIn
                 {
                     CreateCommandBar();
                 }
+
+                // Startup-notificaties
+                CheckForNewVersion();
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                {
+                    System.Threading.Thread.Sleep(1500);
+                    CheckForGitHubUpdate();
+                });
             }
             catch (Exception ex)
             {
@@ -116,8 +124,6 @@ namespace VBEAddIn
 
         public void OnStartupComplete(ref Array custom)
         {
-            CheckForNewVersion();
-            CheckForGitHubUpdate();
         }
 
         public void OnBeginShutdown(ref Array custom)
