@@ -7,8 +7,12 @@ namespace VBEAddIn
 {
     internal static class GitHubReleaseChecker
     {
+        private const string RepoOwner = "jeroenfledderus1991-droid";
+        private const string RepoName = "VBAUtilities";
+        private const string InstallerFileName = "VBEAddIn-Installer.exe";
         private const string LatestReleaseApiUrl = "https://api.github.com/repos/jeroenfledderus1991-droid/VBAUtilities/releases/latest";
         private const string LatestTagApiUrl = "https://api.github.com/repos/jeroenfledderus1991-droid/VBAUtilities/tags?per_page=1";
+        private const string LatestInstallerDownloadUrl = "https://github.com/jeroenfledderus1991-droid/VBAUtilities/releases/latest/download/VBEAddIn-Installer.exe";
 
         internal static bool TryGetLatestRelease(out string version, out string releaseUrl, out string installerUrl, out string failureReason)
         {
@@ -35,6 +39,16 @@ namespace VBEAddIn
                     string tag = ExtractJsonStringValue(json, "tag_name");
                     releaseUrl = ExtractJsonStringValue(json, "html_url");
                     installerUrl = ExtractPreferredInstallerUrl(json);
+
+                    if (string.IsNullOrWhiteSpace(installerUrl))
+                    {
+                        installerUrl = BuildInstallerDownloadUrl(tag);
+                    }
+
+                    if (string.IsNullOrWhiteSpace(installerUrl))
+                    {
+                        installerUrl = LatestInstallerDownloadUrl;
+                    }
 
                     if (string.IsNullOrWhiteSpace(tag))
                     {
@@ -185,6 +199,13 @@ namespace VBEAddIn
                     string tag = match.Groups[1].Value;
                     version = NormalizeTagToVersion(tag);
                     releaseUrl = "https://github.com/jeroenfledderus1991-droid/VBAUtilities/tree/" + tag;
+                    installerUrl = BuildInstallerDownloadUrl(tag);
+
+                    if (string.IsNullOrWhiteSpace(installerUrl))
+                    {
+                        installerUrl = LatestInstallerDownloadUrl;
+                    }
+
                     return !string.IsNullOrWhiteSpace(version);
                 }
             }
@@ -234,6 +255,17 @@ namespace VBEAddIn
             }
 
             return firstExeOrMsi;
+        }
+
+        private static string BuildInstallerDownloadUrl(string tag)
+        {
+            string normalizedTag = (tag ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedTag))
+            {
+                return string.Empty;
+            }
+
+            return "https://github.com/" + RepoOwner + "/" + RepoName + "/releases/download/" + normalizedTag + "/" + InstallerFileName;
         }
     }
 }
