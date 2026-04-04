@@ -20,19 +20,23 @@ namespace VBEAddIn
         private void InitializeForm()
         {
             this.Text = "VBE Code Tools — Versiegeschiedenis";
-            this.Width = 640;
-            this.Height = 420;
+            this.ClientSize = new Size(624, 388);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
 
+            int margin = 12;
+            int buttonHeight = 26;
+            int buttonWidth = 80;
+            int closeTop = this.ClientSize.Height - margin - buttonHeight;
+
             // Left panel: version list
             lstVersions = new ListBox();
-            lstVersions.Left = 12;
-            lstVersions.Top = 12;
+            lstVersions.Left = margin;
+            lstVersions.Top = margin;
             lstVersions.Width = 130;
-            lstVersions.Height = 340;
+            lstVersions.Height = closeTop - margin - 8;
             lstVersions.Font = new Font("Segoe UI", 9.5f);
             lstVersions.SelectedIndexChanged += OnVersionSelected;
             this.Controls.Add(lstVersions);
@@ -51,7 +55,7 @@ namespace VBEAddIn
             rtbDetails.Left = 156;
             rtbDetails.Top = 36;
             rtbDetails.Width = 460;
-            rtbDetails.Height = 316;
+            rtbDetails.Height = closeTop - rtbDetails.Top - 8;
             rtbDetails.ReadOnly = true;
             rtbDetails.BorderStyle = BorderStyle.Fixed3D;
             rtbDetails.Font = new Font("Segoe UI", 9.5f);
@@ -61,10 +65,10 @@ namespace VBEAddIn
             // Close button
             btnClose = new Button();
             btnClose.Text = "Sluiten";
-            btnClose.Left = this.Width - 104;
-            btnClose.Top = 360;
-            btnClose.Width = 80;
-            btnClose.Height = 26;
+            btnClose.Width = buttonWidth;
+            btnClose.Height = buttonHeight;
+            btnClose.Left = this.ClientSize.Width - margin - btnClose.Width;
+            btnClose.Top = closeTop;
             btnClose.Click += (s, e) => this.Close();
             this.Controls.Add(btnClose);
         }
