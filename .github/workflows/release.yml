@@ -1,0 +1,50 @@
+name: Build and Publish Release
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Restore NuGet packages
+        run: nuget restore "VBA C#.sln"
+
+      - name: Build add-in (Release)
+        run: msbuild "VBEAddIn.csproj" /p:Configuration=Release /t:Clean,Build /nologo /v:minimal
+
+      - name: Build installer (Release)
+        run: msbuild "Installer\Installer.csproj" /p:Configuration=Release /t:Rebuild /nologo /v:minimal
+
+      - name: Verify installer exists
+        shell: pwsh
+        run: |
+          $path = "Installer/bin/Release/VBEAddIn-Installer.exe"
+          if (-not (Test-Path $path)) {
+            Write-Error "Installer not found at $path"
+          }
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            Installer/bin/Release/VBEAddIn-Installer.exe
+          fail_on_unmatched_files: true

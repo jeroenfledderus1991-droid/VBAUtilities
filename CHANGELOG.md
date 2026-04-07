@@ -4,6 +4,13 @@ Alle noemenswaardige wijzigingen worden bijgehouden in dit bestand.
 Formaat gebaseerd op [Keep a Changelog](https://keepachangelog.com/nl/1.0.0/).
 
 ---
+## [1.3.3] — 2026-04-07
+
+### Toegevoegd
+- UPDATE VOOR TEST TIMO
+
+---
+
 ## [1.3.0] — 2026-04-04
 
 ### Toegevoegd
