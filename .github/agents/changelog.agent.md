@@ -98,16 +98,17 @@ Zonder GitHub Release (met exact de juiste assetnaam) werkt de updatelink niet.
 Verplicht per nieuwe versie:
 - Zorg dat de tag `X.Y.Z` bestaat op origin
 - Maak een GitHub Release voor die tag
-- Upload de installer asset met naam `VBEAddIn-Installer.exe`
+- Upload de installer asset met versienaam `VBEAddIn-Installer-X.Y.Z.exe`
+- Houd minimaal de huidige + ~8 oudere releases installeerbaar
 
 Voorbeeld met GitHub CLI:
 ```powershell
-gh release create X.Y.Z "Installer/bin/Release/VBEAddIn-Installer.exe" --repo jeroenfledderus1991-droid/VBAUtilities --title "X.Y.Z" --notes "Release X.Y.Z"
+gh release create X.Y.Z "Installer/bin/Release/VBEAddIn-Installer-X.Y.Z.exe" --repo jeroenfledderus1991-droid/VBAUtilities --title "X.Y.Z" --notes "Release X.Y.Z"
 ```
 
 Controleer daarna dat deze URL werkt (HTTP 302/200):
 ```text
-https://github.com/jeroenfledderus1991-droid/VBAUtilities/releases/download/X.Y.Z/VBEAddIn-Installer.exe
+https://github.com/jeroenfledderus1991-droid/VBAUtilities/releases/download/X.Y.Z/VBEAddIn-Installer-X.Y.Z.exe
 ```
 
 ---
@@ -119,4 +120,4 @@ https://github.com/jeroenfledderus1991-droid/VBAUtilities/releases/download/X.Y.
 - Voeg altijd een datum toe in `JJJJ-MM-DD` formaat
 - Laat nooit één van de twee bestanden achter zonder update
 - Voeg geen markdown-opmaak toe binnen de `string[]` in `ChangelogData.cs`
-- Bij elke nieuwe versie moet ook een GitHub Release met `VBEAddIn-Installer.exe` worden gepubliceerd
+- Bij elke nieuwe versie moet ook een GitHub Release met `VBEAddIn-Installer-X.Y.Z.exe` worden gepubliceerd

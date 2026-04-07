@@ -10,6 +10,7 @@ namespace VBEAddIn
         private const string RepoOwner = "jeroenfledderus1991-droid";
         private const string RepoName = "VBAUtilities";
         private const string InstallerFileName = "VBEAddIn-Installer.exe";
+        private const string InstallerFileNamePattern = "VBEAddIn-Installer-{0}.exe";
         private const string LatestReleaseApiUrl = "https://api.github.com/repos/jeroenfledderus1991-droid/VBAUtilities/releases/latest";
         private const string LatestTagApiUrl = "https://api.github.com/repos/jeroenfledderus1991-droid/VBAUtilities/tags?per_page=1";
         private const string LatestInstallerDownloadUrl = "https://github.com/jeroenfledderus1991-droid/VBAUtilities/releases/latest/download/VBEAddIn-Installer.exe";
@@ -43,6 +44,11 @@ namespace VBEAddIn
                     if (string.IsNullOrWhiteSpace(installerUrl))
                     {
                         installerUrl = BuildInstallerDownloadUrl(tag);
+                    }
+
+                    if (string.IsNullOrWhiteSpace(installerUrl))
+                    {
+                        installerUrl = BuildLegacyInstallerDownloadUrl(tag);
                     }
 
                     if (string.IsNullOrWhiteSpace(installerUrl))
@@ -203,6 +209,11 @@ namespace VBEAddIn
 
                     if (string.IsNullOrWhiteSpace(installerUrl))
                     {
+                        installerUrl = BuildLegacyInstallerDownloadUrl(tag);
+                    }
+
+                    if (string.IsNullOrWhiteSpace(installerUrl))
+                    {
                         installerUrl = LatestInstallerDownloadUrl;
                     }
 
@@ -258,6 +269,25 @@ namespace VBEAddIn
         }
 
         private static string BuildInstallerDownloadUrl(string tag)
+        {
+            string normalizedTag = (tag ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedTag))
+            {
+                return string.Empty;
+            }
+
+            string normalizedVersion = NormalizeTagToVersion(normalizedTag);
+            if (string.IsNullOrWhiteSpace(normalizedVersion))
+            {
+                return string.Empty;
+            }
+
+            string installerName = string.Format(InstallerFileNamePattern, normalizedVersion);
+
+            return "https://github.com/" + RepoOwner + "/" + RepoName + "/releases/download/" + normalizedTag + "/" + installerName;
+        }
+
+        private static string BuildLegacyInstallerDownloadUrl(string tag)
         {
             string normalizedTag = (tag ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(normalizedTag))
