@@ -1193,7 +1193,17 @@ namespace VBEAddIn
             }
         }
 
+        internal void CheckForGitHubUpdateManually()
+        {
+            CheckForGitHubUpdate(true);
+        }
+
         private void CheckForGitHubUpdate()
+        {
+            CheckForGitHubUpdate(false);
+        }
+
+        private void CheckForGitHubUpdate(bool isManual)
         {
             try
             {
@@ -1211,21 +1221,44 @@ namespace VBEAddIn
                 if (!GitHubReleaseChecker.TryGetLatestRelease(out latest, out releaseUrl, out installerUrl, out failureReason))
                 {
                     WriteDebug("GitHub update-check overgeslagen: " + failureReason);
+
+                    if (isManual)
+                    {
+                        System.Windows.Forms.MessageBox.Show(
+                            "Controleren op updates is mislukt." + Environment.NewLine + Environment.NewLine +
+                            failureReason,
+                            "Updatecontrole",
+                            System.Windows.Forms.MessageBoxButtons.OK,
+                            System.Windows.Forms.MessageBoxIcon.Warning);
+                    }
+
                     return;
                 }
 
                 if (!GitHubReleaseChecker.IsRemoteNewer(current, latest))
                 {
+                    if (isManual)
+                    {
+                        System.Windows.Forms.MessageBox.Show(
+                            "Je gebruikt al de nieuwste versie." + Environment.NewLine +
+                            "Huidige versie: " + current + Environment.NewLine +
+                            "Nieuwste versie: " + latest,
+                            "Geen update beschikbaar",
+                            System.Windows.Forms.MessageBoxButtons.OK,
+                            System.Windows.Forms.MessageBoxIcon.Information);
+                    }
+
                     return;
                 }
 
-                if (string.Equals(ignored, latest, StringComparison.OrdinalIgnoreCase))
+                if (!isManual && string.Equals(ignored, latest, StringComparison.OrdinalIgnoreCase))
                 {
                     return;
                 }
 
                 DateTime lastPromptUtc;
-                if (string.Equals(lastPromptVersion, latest, StringComparison.OrdinalIgnoreCase)
+                if (!isManual
+                    && string.Equals(lastPromptVersion, latest, StringComparison.OrdinalIgnoreCase)
                     && DateTime.TryParse(lastPromptUtcRaw, null, System.Globalization.DateTimeStyles.RoundtripKind, out lastPromptUtc))
                 {
                     if ((DateTime.UtcNow - lastPromptUtc).TotalDays < remindEveryDays)

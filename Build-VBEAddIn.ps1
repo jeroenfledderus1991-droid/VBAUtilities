@@ -3,12 +3,64 @@
 
 param(
     [switch]$Release = $true,
-    [switch]$Debug = $false
+    [switch]$Debug = $false,
+    [int]$KeepInstallerVersions = 9
 )
 
 $ErrorActionPreference = "Stop"
 
 $config = if ($Debug) { "Debug" } else { "Release" }
+
+function Get-CurrentVersion {
+    param(
+        [string]$ProjectRoot
+    )
+
+    $changelogDataPath = Join-Path $ProjectRoot "ChangelogData.cs"
+    if (-not (Test-Path $changelogDataPath)) {
+        throw "ChangelogData.cs niet gevonden op $changelogDataPath"
+    }
+
+    $match = Select-String -Path $changelogDataPath -Pattern 'CurrentVersion\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"' | Select-Object -First 1
+    if ($null -eq $match) {
+        throw "CurrentVersion niet gevonden in ChangelogData.cs"
+    }
+
+    return $match.Matches[0].Groups[1].Value
+}
+
+function New-VersionedInstallerCopy {
+    param(
+        [string]$InstallerPath,
+        [string]$Version
+    )
+
+    $installerDirectory = Split-Path -Parent $InstallerPath
+    $versionedInstallerPath = Join-Path $installerDirectory ("VBEAddIn-Installer-{0}.exe" -f $Version)
+    Copy-Item -Path $InstallerPath -Destination $versionedInstallerPath -Force
+    return $versionedInstallerPath
+}
+
+function Remove-OldVersionedInstallers {
+    param(
+        [string]$InstallerDirectory,
+        [int]$KeepCount
+    )
+
+    if ($KeepCount -lt 1) {
+        return @()
+    }
+
+    $versionedInstallers = Get-ChildItem -Path $InstallerDirectory -Filter 'VBEAddIn-Installer-*.exe' -File |
+        Sort-Object LastWriteTime -Descending
+
+    $installersToRemove = $versionedInstallers | Select-Object -Skip $KeepCount
+    foreach ($installer in $installersToRemove) {
+        Remove-Item -Path $installer.FullName -Force
+    }
+
+    return $installersToRemove
+}
 
 Write-Host "`n=== VBE Add-in Builder ===" -ForegroundColor Cyan
 Write-Host "Configuratie: $config`n" -ForegroundColor Gray
@@ -25,6 +77,9 @@ Write-Host "MSBuild gevonden: $msbuild`n" -ForegroundColor Gray
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptPath
 Write-Host "Werkmap: $(Get-Location)`n" -ForegroundColor Gray
+
+$currentVersion = Get-CurrentVersion -ProjectRoot $scriptPath
+Write-Host "Versie: $currentVersion`n" -ForegroundColor Gray
 
 # 1. Bouw het VBEAddIn-project
 Write-Host "[1/2] Building VBEAddIn project..." -ForegroundColor Yellow
@@ -47,8 +102,16 @@ Write-Host "`nOutput:" -ForegroundColor Cyan
 
 if (Test-Path $installerPath) {
     $installerFile = Get-Item $installerPath
+    $versionedInstallerPath = New-VersionedInstallerCopy -InstallerPath $installerFile.FullName -Version $currentVersion
+    $removedInstallers = Remove-OldVersionedInstallers -InstallerDirectory $installerFile.DirectoryName -KeepCount $KeepInstallerVersions
+
     Write-Host "  Installer: $installerPath" -ForegroundColor Gray
-   Write-Host "             $([math]::Round($installerFile.Length / 1KB, 2)) KB - $($installerFile.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))" -ForegroundColor Gray
+    Write-Host "             $([math]::Round($installerFile.Length / 1KB, 2)) KB - $($installerFile.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))" -ForegroundColor Gray
+    Write-Host "  Versie:    $versionedInstallerPath" -ForegroundColor Gray
+
+    if ($removedInstallers.Count -gt 0) {
+        Write-Host "  Opgeschoond: $($removedInstallers.Count) oudere installer-versie(s) verwijderd" -ForegroundColor Gray
+    }
 } else {
     Write-Host "  WARNING: Installer niet gevonden op $installerPath" -ForegroundColor Yellow
 }

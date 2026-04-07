@@ -9,6 +9,7 @@ namespace VBEAddIn
         private ListBox lstVersions;
         private RichTextBox rtbDetails;
         private Label lblVersion;
+        private Button btnCheckUpdates;
         private Button btnClose;
 
         internal ChangelogForm()
@@ -63,6 +64,15 @@ namespace VBEAddIn
             this.Controls.Add(rtbDetails);
 
             // Close button
+            btnCheckUpdates = new Button();
+            btnCheckUpdates.Text = "Check op updates";
+            btnCheckUpdates.Width = 130;
+            btnCheckUpdates.Height = buttonHeight;
+            btnCheckUpdates.Left = this.ClientSize.Width - margin - btnCheckUpdates.Width - 8 - buttonWidth;
+            btnCheckUpdates.Top = closeTop;
+            btnCheckUpdates.Click += OnCheckUpdatesClicked;
+            this.Controls.Add(btnCheckUpdates);
+
             btnClose = new Button();
             btnClose.Text = "Sluiten";
             btnClose.Width = buttonWidth;
@@ -124,6 +134,33 @@ namespace VBEAddIn
             rtbDetails.Select(start, line.Length);
             rtbDetails.SelectionColor = color;
             rtbDetails.SelectionLength = 0;
+        }
+
+        private void OnCheckUpdatesClicked(object sender, EventArgs e)
+        {
+            try
+            {
+                UseWaitCursor = true;
+                btnCheckUpdates.Enabled = false;
+
+                if (Connect.Instance != null)
+                {
+                    Connect.Instance.CheckForGitHubUpdateManually();
+                }
+                else
+                {
+                    MessageBox.Show(
+                        "De updatecontrole is momenteel niet beschikbaar.",
+                        "Updatecontrole",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                }
+            }
+            finally
+            {
+                btnCheckUpdates.Enabled = true;
+                UseWaitCursor = false;
+            }
         }
     }
 }
