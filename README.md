@@ -13,10 +13,8 @@ Een C# COM Add-in voor de Visual Basic Editor (VBE) die code formatterings funct
 - **Optimalisatie UIT/AAN**: Schakel Excel optimalisaties uit/aan (events, screenupdating, alerts).
 - **Export VBA**: Exporteer alle VBA componenten naar bestanden.
 - **Reference Manager**: Beheer VBA references in je project.
-- **PDF Export met Inhoudsopgave**: Exporteer geselecteerde sheets naar PDF met automatische inhoudsopgave en bookmarks voor navigatie.
 
 ## Vereisten
-
 - .NET Framework 4.8.1 (of hoger)
 - Microsoft Office met VBA ondersteuning (Excel, Word, Access, etc.)
 - Visual Studio 2019 of nieuwer (alleen voor development/compilatie)
