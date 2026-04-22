@@ -531,6 +531,63 @@ namespace VBEAddIn
                         lines.Insert(i, new CodeLine { OriginalText = "", NewText = "" });
                 }
             }
+
+            // Voeg lege regels toe na declaratie-blok binnen procedures
+            int wantedDeclBlanks = FormatterSettings.BlockBlankLinesAfterDeclarations;
+            bool inProc = false;
+            bool inDeclBlock = false;
+            int lastDeclIdx = -1;
+
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (lines[i].MarkedForDeletion) continue;
+
+                string upper = lines[i].OriginalText.Trim().ToUpper();
+
+                if (Regex.IsMatch(upper, @"^(PUBLIC|PRIVATE|FRIEND)?\s*(SUB|FUNCTION|PROPERTY)\s+"))
+                {
+                    inProc = true;
+                    inDeclBlock = false;
+                    lastDeclIdx = -1;
+                    continue;
+                }
+
+                if (!inProc) continue;
+
+                if (Regex.IsMatch(upper, @"^END\s+(SUB|FUNCTION|PROPERTY)"))
+                {
+                    inProc = false;
+                    inDeclBlock = false;
+                    lastDeclIdx = -1;
+                    continue;
+                }
+
+                string trimmed = lines[i].OriginalText.Trim();
+                bool isDecl = IsDimStatement(trimmed) || IsConstStatement(trimmed);
+                bool isBlank = string.IsNullOrWhiteSpace(trimmed);
+
+                if (isDecl)
+                {
+                    inDeclBlock = true;
+                    lastDeclIdx = i;
+                }
+                else if (inDeclBlock && !isBlank)
+                {
+                    // Eerste niet-lege, niet-declaratie regel na declaratie-blok gevonden.
+                    // Verwijder bestaande lege regels tussen einde declaraties en deze regel.
+                    for (int j = lastDeclIdx + 1; j < i; j++)
+                    {
+                        if (!lines[j].MarkedForDeletion && string.IsNullOrWhiteSpace(lines[j].OriginalText))
+                            lines[j].MarkedForDeletion = true;
+                    }
+                    // Voeg gewenst aantal lege regels in vóór deze regel.
+                    for (int b = 0; b < wantedDeclBlanks; b++)
+                        lines.Insert(i, new CodeLine { OriginalText = "", NewText = "" });
+                    i += wantedDeclBlanks;
+                    inDeclBlock = false;
+                    lastDeclIdx = -1;
+                }
+            }
         }
 
         private void FormatIndentation(List<CodeLine> lines)

@@ -89,7 +89,7 @@ namespace VBEAddIn
         private void InitializeComponent()
         {
             this.Text = "VBE Add-in Instellingen";
-            this.Size = new Size(550, 600);
+            this.Size = new Size(700, 600);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
@@ -99,7 +99,7 @@ namespace VBEAddIn
             tabControl = new TabControl
             {
                 Location = new Point(10, 10),
-                Size = new Size(515, 490),
+                Size = new Size(665, 490),
                 Font = new Font("Segoe UI", 9)
             };
             this.Controls.Add(tabControl);
@@ -143,7 +143,7 @@ namespace VBEAddIn
             btnSave = new Button
             {
                 Text = "Opslaan",
-                Location = new Point(310, 515),
+                Location = new Point(460, 515),
                 Size = new Size(100, 35),
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 BackColor = ColorTranslator.FromHtml("#0078D4"),
@@ -158,7 +158,7 @@ namespace VBEAddIn
             btnCancel = new Button
             {
                 Text = "Annuleren",
-                Location = new Point(420, 515),
+                Location = new Point(570, 515),
                 Size = new Size(100, 35),
                 Font = new Font("Segoe UI", 9),
                 BackColor = Color.LightGray,
@@ -302,15 +302,15 @@ namespace VBEAddIn
             panelFormatterScroll = new Panel
             {
                 Location = new Point(0, 0),
-                Size = new Size(508, 462),
+                Size = new Size(658, 462),
                 AutoScroll = true
             };
             tabCodeFormatter.Controls.Add(panelFormatterScroll);
 
             int y = 10;
             int labelW = 220;
-            int ctrlX = 230;
-            int ctrlW = 220;
+            int ctrlX = 240;
+            int ctrlW = 310;
             Font boldFont = new Font("Segoe UI", 9, FontStyle.Bold);
             Color sectionColor = Color.FromArgb(0, 78, 140);
 
@@ -321,7 +321,7 @@ namespace VBEAddIn
                 {
                     Text = title,
                     Location = new Point(10, y),
-                    Size = new Size(460, 20),
+                    Size = new Size(600, 20),
                     Font = boldFont,
                     ForeColor = sectionColor
                 });
@@ -379,7 +379,7 @@ namespace VBEAddIn
                 {
                     Text = lbl,
                     Location = new Point(20, y),
-                    Size = new Size(440, 20),
+                    Size = new Size(580, 20),
                     Checked = val,
                     Font = new Font("Segoe UI", 9)
                 };
@@ -436,7 +436,7 @@ namespace VBEAddIn
             {
                 Text = "Let op: preset overschrijft bovenstaande opties.",
                 Location = new Point(20, y),
-                Size = new Size(460, 18),
+                Size = new Size(600, 18),
                 Font = new Font("Segoe UI", 8, FontStyle.Italic),
                 ForeColor = Color.Gray
             });
@@ -856,7 +856,7 @@ namespace VBEAddIn
             txtCommentUserName = new TextBox
             {
                 Location = new Point(170, yPos - 3),
-                Size = new Size(300, 23),
+                Size = new Size(440, 23),
                 Font = new Font("Segoe UI", 9),
                 Text = FormatterSettings.CommentUserName
             };
@@ -899,7 +899,7 @@ namespace VBEAddIn
             {
                 Text = "Placeholders: {TIMESTAMP} = datum/tijd | {USERNAME} = uw naam | {FILLER} = asterisks | {TYPE} = START/END",
                 Location = new Point(20, yPos),
-                Size = new Size(460, 30),
+                Size = new Size(600, 30),
                 Font = new Font("Segoe UI", 7.5f, FontStyle.Italic),
                 ForeColor = Color.Gray
             };
@@ -918,7 +918,7 @@ namespace VBEAddIn
             txtCommentTemplateNormal = new TextBox
             {
                 Location = new Point(170, yPos - 3),
-                Size = new Size(300, 23),
+                Size = new Size(440, 23),
                 Font = new Font("Consolas", 9),
                 Text = FormatterSettings.CommentTemplateNormal
             };
@@ -937,7 +937,7 @@ namespace VBEAddIn
             txtCommentTemplateShift = new TextBox
             {
                 Location = new Point(170, yPos - 3),
-                Size = new Size(300, 23),
+                Size = new Size(440, 23),
                 Font = new Font("Consolas", 9),
                 Text = FormatterSettings.CommentTemplateShift
             };
@@ -956,7 +956,7 @@ namespace VBEAddIn
             txtCommentTemplate = new TextBox
             {
                 Location = new Point(170, yPos - 3),
-                Size = new Size(300, 23),
+                Size = new Size(440, 23),
                 Font = new Font("Consolas", 9),
                 Text = FormatterSettings.CommentTemplate
             };
