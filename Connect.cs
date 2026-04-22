@@ -23,7 +23,9 @@ namespace VBEAddIn
         private VBE _vbe;
         private AddIn _addInInstance;
         private CommandBarButton _menuButton;
-        private CommandBarButton _menuButtonComplete;
+        private CommandBarButton _menuButtonFormatProcedure;
+        private CommandBarButton _menuButtonFormatModule;
+        private CommandBarButton _menuButtonFormatFile;
         private CommandBarButton _menuButtonSettings;
         private CommandBarButton _menuButtonWhoAmI;
         private CommandBarButton _menuButtonOptUit;
@@ -45,6 +47,8 @@ namespace VBEAddIn
         private CommandBarButton _cmdOptAan;
         private CommandBarButton _cmdFormatDim;
         private CommandBarButton _cmdFormatComplete;
+        private CommandBarButton _cmdFormatProcedure;
+        private CommandBarButton _cmdFormatFile;
         private CommandBarButton _cmdSettings;
         private CommandBarButton _cmdExportVBA;
         private CommandBarButton _cmdReferenceManager;
@@ -249,32 +253,41 @@ namespace VBEAddIn
                 _menuButton.Click += new _CommandBarButtonEvents_ClickEventHandler(OnMenuButtonClick);
                 WriteDebug("Event handler gekoppeld voor Dim formatter");
                 
-                // Voeg knop 2 toe: Formatteer Complete Code (in Formatting submenu)
+                // Knop 2: Formatteer Procedure
                 WriteDebug("Knop 2 toevoegen aan Formatting submenu...");
-                _menuButtonComplete = (CommandBarButton)formattingMenu.Controls.Add(
-                    MsoControlType.msoControlButton,
-                    Type.Missing,
-                    Type.Missing,
-                    Type.Missing,
-                    true);
-                
-                _menuButtonComplete.Caption = "Formatteer Complete Code";
-                _menuButtonComplete.Tag = "VBEAddIn_FormatComplete";
-                _menuButtonComplete.TooltipText = "Formatteer hele module: indentatie, Dims, blank lines";
-                _menuButtonComplete.Style = MsoButtonStyle.msoButtonIconAndCaption;
-                
-                try
-                {
-                    _menuButtonComplete.FaceId = 2151;
-                    WriteDebug("Icon gezet voor complete formatter");
-                }
-                catch (Exception iconEx)
-                {
-                    WriteDebug("Icon error (geen probleem): " + iconEx.Message);
-                }
-                
-                _menuButtonComplete.Click += new _CommandBarButtonEvents_ClickEventHandler(OnMenuButtonCompleteClick);
-                WriteDebug("Event handler gekoppeld voor complete formatter");
+                _menuButtonFormatProcedure = (CommandBarButton)formattingMenu.Controls.Add(
+                    MsoControlType.msoControlButton, Type.Missing, Type.Missing, Type.Missing, true);
+                _menuButtonFormatProcedure.Caption = "Formatteer Procedure";
+                _menuButtonFormatProcedure.Tag = "VBEAddIn_FormatProcedure";
+                _menuButtonFormatProcedure.TooltipText = "Formatteer de procedure waar de cursor in staat";
+                _menuButtonFormatProcedure.Style = MsoButtonStyle.msoButtonIconAndCaption;
+                try { _menuButtonFormatProcedure.FaceId = 2151; } catch { }
+                _menuButtonFormatProcedure.Click += new _CommandBarButtonEvents_ClickEventHandler(OnMenuFormatProcedureClick);
+                WriteDebug("Event handler gekoppeld voor Format Procedure");
+
+                // Knop 3: Formatteer Module
+                WriteDebug("Knop 3 toevoegen aan Formatting submenu...");
+                _menuButtonFormatModule = (CommandBarButton)formattingMenu.Controls.Add(
+                    MsoControlType.msoControlButton, Type.Missing, Type.Missing, Type.Missing, true);
+                _menuButtonFormatModule.Caption = "Formatteer Module";
+                _menuButtonFormatModule.Tag = "VBEAddIn_FormatModule";
+                _menuButtonFormatModule.TooltipText = "Formatteer de gehele huidige module";
+                _menuButtonFormatModule.Style = MsoButtonStyle.msoButtonIconAndCaption;
+                try { _menuButtonFormatModule.FaceId = 2152; } catch { }
+                _menuButtonFormatModule.Click += new _CommandBarButtonEvents_ClickEventHandler(OnMenuFormatModuleClick);
+                WriteDebug("Event handler gekoppeld voor Format Module");
+
+                // Knop 4: Formatteer Volledig VBA-bestand
+                WriteDebug("Knop 4 toevoegen aan Formatting submenu...");
+                _menuButtonFormatFile = (CommandBarButton)formattingMenu.Controls.Add(
+                    MsoControlType.msoControlButton, Type.Missing, Type.Missing, Type.Missing, true);
+                _menuButtonFormatFile.Caption = "Formatteer Volledig VBA-bestand";
+                _menuButtonFormatFile.Tag = "VBEAddIn_FormatFile";
+                _menuButtonFormatFile.TooltipText = "Formatteer alle modules in het VBA-project";
+                _menuButtonFormatFile.Style = MsoButtonStyle.msoButtonIconAndCaption;
+                try { _menuButtonFormatFile.FaceId = 71; } catch { }
+                _menuButtonFormatFile.Click += new _CommandBarButtonEvents_ClickEventHandler(OnMenuFormatFileClick);
+                WriteDebug("Event handler gekoppeld voor Format File");
                 
                 // Voeg Instellingen toe direct aan Utilities (niet in submenu)
                 WriteDebug("Instellingen knop toevoegen aan Utilities menu...");
@@ -625,8 +638,40 @@ namespace VBEAddIn
                     _cmdFormatComplete.TooltipText = "Formatteer Complete Code";
                     _cmdFormatComplete.Style = MsoButtonStyle.msoButtonIconAndCaption;
                     try { _cmdFormatComplete.FaceId = 2151; } catch { }
-                    _cmdFormatComplete.Click += new _CommandBarButtonEvents_ClickEventHandler(OnMenuButtonCompleteClick);
+                    _cmdFormatComplete.Click += new _CommandBarButtonEvents_ClickEventHandler(OnMenuFormatModuleClick);
                     WriteDebug("CommandBar: Format Complete toegevoegd");
+                }
+
+                if (FormatterSettings.CommandBarShowFormatProcedure)
+                {
+                    _cmdFormatProcedure = (CommandBarButton)_commandBar.Controls.Add(
+                        MsoControlType.msoControlButton,
+                        Type.Missing,
+                        Type.Missing,
+                        Type.Missing,
+                        true);
+                    _cmdFormatProcedure.Caption = "Proc";
+                    _cmdFormatProcedure.TooltipText = "Formatteer Procedure";
+                    _cmdFormatProcedure.Style = MsoButtonStyle.msoButtonIconAndCaption;
+                    try { _cmdFormatProcedure.FaceId = 2151; } catch { }
+                    _cmdFormatProcedure.Click += new _CommandBarButtonEvents_ClickEventHandler(OnMenuFormatProcedureClick);
+                    WriteDebug("CommandBar: Format Procedure toegevoegd");
+                }
+
+                if (FormatterSettings.CommandBarShowFormatFile)
+                {
+                    _cmdFormatFile = (CommandBarButton)_commandBar.Controls.Add(
+                        MsoControlType.msoControlButton,
+                        Type.Missing,
+                        Type.Missing,
+                        Type.Missing,
+                        true);
+                    _cmdFormatFile.Caption = "VBA";
+                    _cmdFormatFile.TooltipText = "Formatteer Volledig VBA-bestand";
+                    _cmdFormatFile.Style = MsoButtonStyle.msoButtonIconAndCaption;
+                    try { _cmdFormatFile.FaceId = 2151; } catch { }
+                    _cmdFormatFile.Click += new _CommandBarButtonEvents_ClickEventHandler(OnMenuFormatFileClick);
+                    WriteDebug("CommandBar: Format File toegevoegd");
                 }
                 
                 if (FormatterSettings.CommandBarShowSettings)
@@ -767,6 +812,8 @@ namespace VBEAddIn
                 _cmdOptAan = null;
                 _cmdFormatDim = null;
                 _cmdFormatComplete = null;
+                _cmdFormatProcedure = null;
+                _cmdFormatFile = null;
                 _cmdSettings = null;
                 _cmdExportVBA = null;
                 _cmdReferenceManager = null;
@@ -788,10 +835,20 @@ namespace VBEAddIn
                     _menuButton.Delete(true);
                     _menuButton = null;
                 }
-                if (_menuButtonComplete != null)
+                if (_menuButtonFormatProcedure != null)
                 {
-                    _menuButtonComplete.Delete(true);
-                    _menuButtonComplete = null;
+                    _menuButtonFormatProcedure.Delete(true);
+                    _menuButtonFormatProcedure = null;
+                }
+                if (_menuButtonFormatModule != null)
+                {
+                    _menuButtonFormatModule.Delete(true);
+                    _menuButtonFormatModule = null;
+                }
+                if (_menuButtonFormatFile != null)
+                {
+                    _menuButtonFormatFile.Delete(true);
+                    _menuButtonFormatFile = null;
                 }
                 if (_menuButtonSettings != null)
                 {
@@ -873,9 +930,19 @@ namespace VBEAddIn
             FormatDimStatements();
         }
 
-        private void OnMenuButtonCompleteClick(CommandBarButton Ctrl, ref bool CancelDefault)
+        private void OnMenuFormatProcedureClick(CommandBarButton Ctrl, ref bool CancelDefault)
         {
-            FormatCompleteCode();
+            FormatProcedureCode();
+        }
+
+        private void OnMenuFormatModuleClick(CommandBarButton Ctrl, ref bool CancelDefault)
+        {
+            FormatModuleCode();
+        }
+
+        private void OnMenuFormatFileClick(CommandBarButton Ctrl, ref bool CancelDefault)
+        {
+            FormatFileCode();
         }
 
         private void OnMenuButtonSettingsClick(CommandBarButton Ctrl, ref bool CancelDefault)
@@ -979,43 +1046,101 @@ namespace VBEAddIn
         }
 
         /// <summary>
-        /// Formatteer complete code met alle structuren
+        /// Formatteert de procedure waar de cursor in staat.
         /// </summary>
         [ComVisible(true)]
-        public void FormatCompleteCode()
+        public void FormatProcedureCode()
         {
             try
             {
                 if (_vbe == null || _vbe.ActiveCodePane == null)
                 {
                     System.Windows.Forms.MessageBox.Show(
-                        "Open eerst een code module in de VBA Editor.", 
-                        "Geen actieve code", 
-                        System.Windows.Forms.MessageBoxButtons.OK, 
+                        "Open eerst een code module in de VBA Editor.",
+                        "Geen actieve code",
+                        System.Windows.Forms.MessageBoxButtons.OK,
                         System.Windows.Forms.MessageBoxIcon.Information);
                     return;
                 }
 
-                var codeModule = _vbe.ActiveCodePane.CodeModule;
                 var formatter = new CompleteCodeFormatter();
-                var result = formatter.FormatCode(codeModule);
+                var result = formatter.FormatProcedure(_vbe);
 
-                System.Windows.Forms.MessageBox.Show(
-                    result, 
-                    "Complete Code Formatting Resultaat", 
-                    System.Windows.Forms.MessageBoxButtons.OK, 
-                    System.Windows.Forms.MessageBoxIcon.Information);
+                if (result != "Geannuleerd.")
+                    System.Windows.Forms.MessageBox.Show(result, "Procedure Formatting Resultaat",
+                        System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
-                string errorMsg = "Fout bij formatteren: " + ex.Message + "\n\nStackTrace: " + ex.StackTrace;
-                System.Diagnostics.Debug.WriteLine("=== VBE AddIn FormatCompleteCode Fout ===");
-                System.Diagnostics.Debug.WriteLine(errorMsg);
-                System.Windows.Forms.MessageBox.Show(
-                    "Fout bij formatteren: " + ex.Message, 
-                    "Fout", 
-                    System.Windows.Forms.MessageBoxButtons.OK, 
-                    System.Windows.Forms.MessageBoxIcon.Error);
+                System.Diagnostics.Debug.WriteLine("=== VBE AddIn FormatProcedureCode Fout ===\n" + ex.StackTrace);
+                System.Windows.Forms.MessageBox.Show("Fout bij formatteren: " + ex.Message, "Fout",
+                    System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// Formatteert de gehele huidige module.
+        /// </summary>
+        [ComVisible(true)]
+        public void FormatModuleCode()
+        {
+            try
+            {
+                if (_vbe == null || _vbe.ActiveCodePane == null)
+                {
+                    System.Windows.Forms.MessageBox.Show(
+                        "Open eerst een code module in de VBA Editor.",
+                        "Geen actieve code",
+                        System.Windows.Forms.MessageBoxButtons.OK,
+                        System.Windows.Forms.MessageBoxIcon.Information);
+                    return;
+                }
+
+                var formatter = new CompleteCodeFormatter();
+                var result = formatter.FormatModule(_vbe.ActiveCodePane.CodeModule);
+
+                if (result != "Geannuleerd.")
+                    System.Windows.Forms.MessageBox.Show(result, "Module Formatting Resultaat",
+                        System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("=== VBE AddIn FormatModuleCode Fout ===\n" + ex.StackTrace);
+                System.Windows.Forms.MessageBox.Show("Fout bij formatteren: " + ex.Message, "Fout",
+                    System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// Formatteert alle modules in het actieve VBA-project.
+        /// </summary>
+        [ComVisible(true)]
+        public void FormatFileCode()
+        {
+            try
+            {
+                if (_vbe == null)
+                {
+                    System.Windows.Forms.MessageBox.Show(
+                        "VBA Editor niet beschikbaar.",
+                        "Geen actieve code",
+                        System.Windows.Forms.MessageBoxButtons.OK,
+                        System.Windows.Forms.MessageBoxIcon.Information);
+                    return;
+                }
+
+                var formatter = new CompleteCodeFormatter();
+                var result = formatter.FormatFile(_vbe);
+
+                if (result != "Geannuleerd.")
+                    System.Windows.Forms.MessageBox.Show(result, "Volledig VBA-bestand Formatting Resultaat",
+                        System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("=== VBE AddIn FormatFileCode Fout ===\n" + ex.StackTrace);
+                System.Windows.Forms.MessageBox.Show("Fout bij formatteren: " + ex.Message, "Fout",
+                    System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error);
             }
         }
 

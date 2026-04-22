@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Memory
+- Lees bij start altijd: ~/.claude/projects/VBA C#/memory/MEMORY.md
+- Volg de index daarin en laad alle genoemde files
+
 ## Project Overview
 
 A C# COM add-in for the Visual Basic Editor (VBE) in Microsoft Office applications. It adds a custom "Utilities" menu to the VBE with code formatting, Excel helpers, a code library system, and developer tools.
@@ -62,3 +66,10 @@ Triggers on push of semantic version tags (`*.*.*`). Builds both projects and pu
 3. Add the version entry to the `Entries` list in `ChangelogData.cs` (shown in-app changelog)
 4. Commit and tag: `git tag x.y.z && git push origin x.y.z`
    — GitHub Actions handles the rest.
+
+## Hard Rules
+- Run tests/verificatie vóór "done".
+- Max 50 regels per bugfix.
+- Eén fix per commit.
+- Raak auth/stripe/middleware niet aan zonder expliciete toestemming.
+- Claude mag niet "done/fixed/ready" zeggen zonder het verify-commando te draaien en output te tonen.

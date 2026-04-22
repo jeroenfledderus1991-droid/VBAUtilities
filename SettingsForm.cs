@@ -9,9 +9,34 @@ namespace VBEAddIn
     {
         private TabControl tabControl;
         private TabPage tabFormatting;
+        private TabPage tabCodeFormatter;
         private TabPage tabGeneral;
         private TabPage tabReferences;
         private TabPage tabComments;
+
+        // Code Formatter tab controls
+        private Panel panelFormatterScroll;
+        private ComboBox cmbIndentType;
+        private ComboBox cmbIndentSize;
+        private ComboBox cmbIndentLabelStyle;
+        private ComboBox cmbKeywordsCase;
+        private NumericUpDown numBlankLinesBetweenProcs;
+        private NumericUpDown numBlankLinesAfterDecl;
+        private NumericUpDown numKeepBlankLinesMax;
+        private CheckBox chkSpacingOperators;
+        private CheckBox chkSpacingComma;
+        private CheckBox chkSpacingParens;
+        private ComboBox cmbCommentStyle;
+        private ComboBox cmbOptionExplicit;
+        private CheckBox chkTrailingWhitespace;
+        private CheckBox chkFinalNewline;
+        private Button btnPresetMinimal;
+        private Button btnPresetStandard;
+        private Button btnPresetStrict;
+
+        // CommandBar – nieuwe formatter-knoppen
+        private CheckBox chkCmdFormatProcedure;
+        private CheckBox chkCmdFormatFile;
         
         private ListBox lstDimTypes;
         private Button btnUp;
@@ -79,15 +104,19 @@ namespace VBEAddIn
             };
             this.Controls.Add(tabControl);
 
-            // Tab: Formatting
+            // Tab: Formatting (Dim sorting)
             tabFormatting = new TabPage("Formatting");
             tabControl.TabPages.Add(tabFormatting);
+
+            // Tab: Code Formatter opties
+            tabCodeFormatter = new TabPage("Code Formatter");
+            tabControl.TabPages.Add(tabCodeFormatter);
 
             // Tab: Comments
             tabComments = new TabPage("Comments");
             tabControl.TabPages.Add(tabComments);
 
-            // Tab: General (voor toekomstige instellingen)
+            // Tab: Commandbar
             tabGeneral = new TabPage("Commandbar");
             tabControl.TabPages.Add(tabGeneral);
 
@@ -97,6 +126,9 @@ namespace VBEAddIn
 
             // === FORMATTING TAB CONTENT ===
             InitializeFormattingTab();
+
+            // === CODE FORMATTER TAB CONTENT ===
+            InitializeCodeFormatterTab();
 
             // === COMMENTS TAB CONTENT ===
             InitializeCommentsTab();
@@ -265,6 +297,224 @@ namespace VBEAddIn
             tabFormatting.Controls.Add(btnRename);
         }
 
+        private void InitializeCodeFormatterTab()
+        {
+            panelFormatterScroll = new Panel
+            {
+                Location = new Point(0, 0),
+                Size = new Size(508, 462),
+                AutoScroll = true
+            };
+            tabCodeFormatter.Controls.Add(panelFormatterScroll);
+
+            int y = 10;
+            int labelW = 220;
+            int ctrlX = 230;
+            int ctrlW = 220;
+            Font boldFont = new Font("Segoe UI", 9, FontStyle.Bold);
+            Color sectionColor = Color.FromArgb(0, 78, 140);
+
+            // Helper: sectie-header
+            Action<string> addHeader = title =>
+            {
+                panelFormatterScroll.Controls.Add(new Label
+                {
+                    Text = title,
+                    Location = new Point(10, y),
+                    Size = new Size(460, 20),
+                    Font = boldFont,
+                    ForeColor = sectionColor
+                });
+                y += 25;
+            };
+            // Helper: label + combobox op één rij
+            Func<string, string[], string, ComboBox> addCombo = (lbl, items, selected) =>
+            {
+                panelFormatterScroll.Controls.Add(new Label
+                {
+                    Text = lbl,
+                    Location = new Point(20, y + 3),
+                    Size = new Size(labelW, 20)
+                });
+                var cmb = new ComboBox
+                {
+                    Location = new Point(ctrlX, y),
+                    Size = new Size(ctrlW, 23),
+                    DropDownStyle = ComboBoxStyle.DropDownList,
+                    Font = new Font("Segoe UI", 9)
+                };
+                cmb.Items.AddRange(items);
+                cmb.SelectedItem = selected;
+                if (cmb.SelectedIndex < 0 && cmb.Items.Count > 0) cmb.SelectedIndex = 0;
+                panelFormatterScroll.Controls.Add(cmb);
+                y += 30;
+                return cmb;
+            };
+            // Helper: label + numericupdown
+            Func<string, int, int, int, NumericUpDown> addNum = (lbl, val, min, max) =>
+            {
+                panelFormatterScroll.Controls.Add(new Label
+                {
+                    Text = lbl,
+                    Location = new Point(20, y + 3),
+                    Size = new Size(labelW, 20)
+                });
+                var num = new NumericUpDown
+                {
+                    Location = new Point(ctrlX, y),
+                    Size = new Size(70, 23),
+                    Minimum = min,
+                    Maximum = max,
+                    Value = val,
+                    Font = new Font("Segoe UI", 9)
+                };
+                panelFormatterScroll.Controls.Add(num);
+                y += 30;
+                return num;
+            };
+            // Helper: checkbox
+            Func<string, bool, CheckBox> addCheck = (lbl, val) =>
+            {
+                var chk = new CheckBox
+                {
+                    Text = lbl,
+                    Location = new Point(20, y),
+                    Size = new Size(440, 20),
+                    Checked = val,
+                    Font = new Font("Segoe UI", 9)
+                };
+                panelFormatterScroll.Controls.Add(chk);
+                y += 28;
+                return chk;
+            };
+
+            // === INDENTATIE ===
+            addHeader("Indentatie");
+            cmbIndentType = addCombo("Inspringing type:", new[] { "spaces", "tabs" }, FormatterSettings.IndentType);
+            cmbIndentSize = addCombo("Grootte (spaties):", new[] { "2", "4", "8" }, FormatterSettings.IndentSize.ToString());
+            cmbIndentLabelStyle = addCombo("GoTo labels:", new[] { "flush_left", "indent_with_code" }, FormatterSettings.IndentLabelStyle);
+            y += 5;
+
+            // === KEYWORDS ===
+            addHeader("Keywords");
+            cmbKeywordsCase = addCombo("Keyword opmaak:", new[] { "preserve", "pascal", "uppercase", "lowercase" }, FormatterSettings.KeywordsCase);
+            y += 5;
+
+            // === BLOKKEN & LEGE REGELS ===
+            addHeader("Blokken & Lege Regels");
+            numBlankLinesBetweenProcs = addNum("Lege regels tussen procedures:", FormatterSettings.BlockBlankLinesBetweenProcedures, 0, 2);
+            numBlankLinesAfterDecl = addNum("Lege regels na declaraties:", FormatterSettings.BlockBlankLinesAfterDeclarations, 0, 2);
+            numKeepBlankLinesMax = addNum("Max opeenvolgende lege regels:", FormatterSettings.MiscKeepBlankLinesMax, 0, 3);
+            y += 5;
+
+            // === SPATIES ===
+            addHeader("Spaties");
+            chkSpacingOperators = addCheck("Spaties rond operatoren  (a + b, x = y)", FormatterSettings.SpacingAroundOperators);
+            chkSpacingComma = addCheck("Spatie na komma's  (Foo(a, b))", FormatterSettings.SpacingAfterComma);
+            chkSpacingParens = addCheck("Spaties binnen haakjes  ( a + b )", FormatterSettings.SpacingInsideParentheses);
+            y += 5;
+
+            // === COMMENTAAR ===
+            addHeader("Commentaar");
+            cmbCommentStyle = addCombo("Commentaar stijl:", new[] { "preserve", "apostrophe", "rem" }, FormatterSettings.CommentStyle);
+            y += 5;
+
+            // === DECLARATIES ===
+            addHeader("Declaraties");
+            cmbOptionExplicit = addCombo("Option Explicit:", new[] { "preserve", "require", "remove" }, FormatterSettings.DeclarationsOptionExplicit);
+            y += 5;
+
+            // === DIVERSEN ===
+            addHeader("Diversen");
+            chkTrailingWhitespace = addCheck("Verwijder trailing spaties (regeleindes)", FormatterSettings.MiscRemoveTrailingWhitespace);
+            chkFinalNewline = addCheck("Zorg voor lege regel aan einde van module", FormatterSettings.MiscEnsureFinalNewline);
+            y += 10;
+
+            // === PRESETS ===
+            addHeader("Presets – snel instellen");
+            panelFormatterScroll.Controls.Add(new Label
+            {
+                Text = "Let op: preset overschrijft bovenstaande opties.",
+                Location = new Point(20, y),
+                Size = new Size(460, 18),
+                Font = new Font("Segoe UI", 8, FontStyle.Italic),
+                ForeColor = Color.Gray
+            });
+            y += 22;
+
+            btnPresetMinimal = new Button
+            {
+                Text = "Minimaal",
+                Location = new Point(20, y),
+                Size = new Size(110, 30),
+                Font = new Font("Segoe UI", 9),
+                FlatStyle = FlatStyle.Flat
+            };
+            btnPresetMinimal.FlatAppearance.BorderSize = 1;
+            btnPresetMinimal.Click += (s, e) => ApplyPreset("minimal");
+            panelFormatterScroll.Controls.Add(btnPresetMinimal);
+
+            btnPresetStandard = new Button
+            {
+                Text = "Standaard",
+                Location = new Point(140, y),
+                Size = new Size(110, 30),
+                Font = new Font("Segoe UI", 9),
+                BackColor = ColorTranslator.FromHtml("#0078D4"),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            btnPresetStandard.FlatAppearance.BorderSize = 0;
+            btnPresetStandard.Click += (s, e) => ApplyPreset("standard");
+            panelFormatterScroll.Controls.Add(btnPresetStandard);
+
+            btnPresetStrict = new Button
+            {
+                Text = "Strikt",
+                Location = new Point(260, y),
+                Size = new Size(110, 30),
+                Font = new Font("Segoe UI", 9),
+                BackColor = ColorTranslator.FromHtml("#107C10"),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            btnPresetStrict.FlatAppearance.BorderSize = 0;
+            btnPresetStrict.Click += (s, e) => ApplyPreset("strict");
+            panelFormatterScroll.Controls.Add(btnPresetStrict);
+        }
+
+        private void ApplyPreset(string preset)
+        {
+            // Reset naar veilige defaults
+            cmbIndentType.SelectedItem = "spaces";
+            cmbIndentSize.SelectedItem = "4";
+            cmbIndentLabelStyle.SelectedItem = "flush_left";
+            cmbKeywordsCase.SelectedItem = "preserve";
+            numBlankLinesBetweenProcs.Value = 1;
+            numBlankLinesAfterDecl.Value = 0;
+            numKeepBlankLinesMax.Value = 2;
+            chkSpacingOperators.Checked = false;
+            chkSpacingComma.Checked = false;
+            chkSpacingParens.Checked = false;
+            cmbCommentStyle.SelectedItem = "preserve";
+            cmbOptionExplicit.SelectedItem = "preserve";
+            chkTrailingWhitespace.Checked = false;
+            chkFinalNewline.Checked = false;
+
+            if (preset == "standard" || preset == "strict")
+            {
+                chkSpacingComma.Checked = true;
+                chkTrailingWhitespace.Checked = true;
+                cmbKeywordsCase.SelectedItem = "pascal";
+            }
+            if (preset == "strict")
+            {
+                chkSpacingOperators.Checked = true;
+                cmbOptionExplicit.SelectedItem = "require";
+                chkFinalNewline.Checked = true;
+            }
+        }
+
         private void InitializeGeneralTab()
         {
             // Titel
@@ -343,10 +593,10 @@ namespace VBEAddIn
             };
             tabGeneral.Controls.Add(chkCmdFormatDim);
 
-            // Formatteer Complete
+            // Formatteer Module (was "Complete Code")
             chkCmdFormatComplete = new CheckBox
             {
-                Text = "Formatteer Complete Code",
+                Text = "Formatteer Module",
                 Location = new Point(40, 210),
                 Size = new Size(300, 20),
                 Checked = FormatterSettings.CommandBarShowFormatComplete,
@@ -421,11 +671,33 @@ namespace VBEAddIn
             };
             tabGeneral.Controls.Add(chkCmdInsertComment);
 
+            // Formatteer Procedure
+            chkCmdFormatProcedure = new CheckBox
+            {
+                Text = "Formatteer Procedure",
+                Location = new Point(40, 360),
+                Size = new Size(300, 20),
+                Checked = FormatterSettings.CommandBarShowFormatProcedure,
+                Enabled = FormatterSettings.ShowCommandBar
+            };
+            tabGeneral.Controls.Add(chkCmdFormatProcedure);
+
+            // Formatteer Volledig VBA-bestand
+            chkCmdFormatFile = new CheckBox
+            {
+                Text = "Formatteer Volledig VBA-bestand",
+                Location = new Point(40, 385),
+                Size = new Size(300, 20),
+                Checked = FormatterSettings.CommandBarShowFormatFile,
+                Enabled = FormatterSettings.ShowCommandBar
+            };
+            tabGeneral.Controls.Add(chkCmdFormatFile);
+
             // Info label
             Label lblInfo = new Label
             {
                 Text = "CommandBar wordt direct bijgewerkt na opslaan (geen herstart nodig).",
-                Location = new Point(20, 395),
+                Location = new Point(20, 420),
                 Size = new Size(450, 40),
                 Font = new Font("Segoe UI", 8, FontStyle.Italic),
                 ForeColor = Color.DarkGreen
@@ -447,6 +719,8 @@ namespace VBEAddIn
             chkCmdCodeLibrary.Enabled = enabled;
             chkCmdExportToLibrary.Enabled = enabled;
             chkCmdInsertComment.Enabled = enabled;
+            chkCmdFormatProcedure.Enabled = enabled;
+            chkCmdFormatFile.Enabled = enabled;
         }
 
         private void InitializeReferencesTab()
@@ -951,6 +1225,24 @@ namespace VBEAddIn
                 FormatterSettings.CommandBarShowCodeLibrary = chkCmdCodeLibrary.Checked;
                 FormatterSettings.CommandBarShowExportToLibrary = chkCmdExportToLibrary.Checked;
                 FormatterSettings.CommandBarShowInsertComment = chkCmdInsertComment.Checked;
+                FormatterSettings.CommandBarShowFormatProcedure = chkCmdFormatProcedure.Checked;
+                FormatterSettings.CommandBarShowFormatFile = chkCmdFormatFile.Checked;
+
+                // Code Formatter instellingen
+                FormatterSettings.IndentType = cmbIndentType.SelectedItem?.ToString() ?? "spaces";
+                FormatterSettings.IndentSize = int.TryParse(cmbIndentSize.SelectedItem?.ToString(), out int sz) ? sz : 4;
+                FormatterSettings.IndentLabelStyle = cmbIndentLabelStyle.SelectedItem?.ToString() ?? "flush_left";
+                FormatterSettings.KeywordsCase = cmbKeywordsCase.SelectedItem?.ToString() ?? "preserve";
+                FormatterSettings.BlockBlankLinesBetweenProcedures = (int)numBlankLinesBetweenProcs.Value;
+                FormatterSettings.BlockBlankLinesAfterDeclarations = (int)numBlankLinesAfterDecl.Value;
+                FormatterSettings.MiscKeepBlankLinesMax = (int)numKeepBlankLinesMax.Value;
+                FormatterSettings.SpacingAroundOperators = chkSpacingOperators.Checked;
+                FormatterSettings.SpacingAfterComma = chkSpacingComma.Checked;
+                FormatterSettings.SpacingInsideParentheses = chkSpacingParens.Checked;
+                FormatterSettings.CommentStyle = cmbCommentStyle.SelectedItem?.ToString() ?? "preserve";
+                FormatterSettings.DeclarationsOptionExplicit = cmbOptionExplicit.SelectedItem?.ToString() ?? "preserve";
+                FormatterSettings.MiscRemoveTrailingWhitespace = chkTrailingWhitespace.Checked;
+                FormatterSettings.MiscEnsureFinalNewline = chkFinalNewline.Checked;
 
                 // Save Comment settings (alleen als controls bestaan)
                 if (txtCommentUserName != null)

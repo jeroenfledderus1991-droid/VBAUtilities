@@ -199,6 +199,39 @@ namespace VBEAddIn
             }
         }
 
+        // === Code Formatter opties ===
+        // Indentatie
+        public static string IndentType = "spaces";           // "tabs" | "spaces"
+        public static int IndentSize = 4;                     // 2 | 4 | 8
+        public static string IndentLabelStyle = "flush_left"; // "flush_left" | "indent_with_code"
+
+        // Keywords
+        public static string KeywordsCase = "preserve";       // "uppercase"|"lowercase"|"pascal"|"preserve"
+
+        // Blokken & lege regels
+        public static int BlockBlankLinesBetweenProcedures = 1; // 0|1|2
+        public static int BlockBlankLinesAfterDeclarations = 0; // 0|1|2
+        public static int MiscKeepBlankLinesMax = 2;            // 0|1|2|3
+
+        // Spaties
+        public static bool SpacingAroundOperators = false;
+        public static bool SpacingAfterComma = false;
+        public static bool SpacingInsideParentheses = false;
+
+        // Commentaar
+        public static string CommentStyle = "preserve";       // "apostrophe"|"rem"|"preserve"
+
+        // Declaraties
+        public static string DeclarationsOptionExplicit = "preserve"; // "require"|"remove"|"preserve"
+
+        // Diversen
+        public static bool MiscRemoveTrailingWhitespace = false;
+        public static bool MiscEnsureFinalNewline = false;
+
+        // CommandBar – nieuwe formatter-knoppen
+        public static bool CommandBarShowFormatProcedure = false;
+        public static bool CommandBarShowFormatFile = false;
+
         #region Registry Persistence
 
         private const string RegistryPath = @"Software\VBEAddIn\Settings";
@@ -287,6 +320,24 @@ namespace VBEAddIn
 
                         // DimTypeSortOrder wordt niet in registry opgeslagen (te complex)
 
+                        // Code Formatter opties
+                        IndentType = (string)key.GetValue("IndentType", "spaces");
+                        IndentSize = (int)key.GetValue("IndentSize", 4);
+                        IndentLabelStyle = (string)key.GetValue("IndentLabelStyle", "flush_left");
+                        KeywordsCase = (string)key.GetValue("KeywordsCase", "preserve");
+                        BlockBlankLinesBetweenProcedures = (int)key.GetValue("BlockBlankLinesBetweenProcedures", 1);
+                        BlockBlankLinesAfterDeclarations = (int)key.GetValue("BlockBlankLinesAfterDeclarations", 0);
+                        MiscKeepBlankLinesMax = (int)key.GetValue("MiscKeepBlankLinesMax", 2);
+                        SpacingAroundOperators = ((int)key.GetValue("SpacingAroundOperators", 0)) == 1;
+                        SpacingAfterComma = ((int)key.GetValue("SpacingAfterComma", 0)) == 1;
+                        SpacingInsideParentheses = ((int)key.GetValue("SpacingInsideParentheses", 0)) == 1;
+                        CommentStyle = (string)key.GetValue("CommentStyle", "preserve");
+                        DeclarationsOptionExplicit = (string)key.GetValue("DeclarationsOptionExplicit", "preserve");
+                        MiscRemoveTrailingWhitespace = ((int)key.GetValue("MiscRemoveTrailingWhitespace", 0)) == 1;
+                        MiscEnsureFinalNewline = ((int)key.GetValue("MiscEnsureFinalNewline", 0)) == 1;
+                        CommandBarShowFormatProcedure = ((int)key.GetValue("CommandBarShowFormatProcedure", 0)) == 1;
+                        CommandBarShowFormatFile = ((int)key.GetValue("CommandBarShowFormatFile", 0)) == 1;
+
                         // Versienotificatie
                         LastSeenVersion = (string)key.GetValue("LastSeenVersion", "");
                         IgnoredGitHubVersion = (string)key.GetValue("IgnoredGitHubVersion", "");
@@ -345,6 +396,24 @@ namespace VBEAddIn
                         key.SetValue("RefEnableRegExp", RefEnableRegExp ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
                         key.SetValue("RefEnableShellControls", RefEnableShellControls ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
                         key.SetValue("RefEnableMSForms", RefEnableMSForms ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+
+                        // Code Formatter opties
+                        key.SetValue("IndentType", IndentType, Microsoft.Win32.RegistryValueKind.String);
+                        key.SetValue("IndentSize", IndentSize, Microsoft.Win32.RegistryValueKind.DWord);
+                        key.SetValue("IndentLabelStyle", IndentLabelStyle, Microsoft.Win32.RegistryValueKind.String);
+                        key.SetValue("KeywordsCase", KeywordsCase, Microsoft.Win32.RegistryValueKind.String);
+                        key.SetValue("BlockBlankLinesBetweenProcedures", BlockBlankLinesBetweenProcedures, Microsoft.Win32.RegistryValueKind.DWord);
+                        key.SetValue("BlockBlankLinesAfterDeclarations", BlockBlankLinesAfterDeclarations, Microsoft.Win32.RegistryValueKind.DWord);
+                        key.SetValue("MiscKeepBlankLinesMax", MiscKeepBlankLinesMax, Microsoft.Win32.RegistryValueKind.DWord);
+                        key.SetValue("SpacingAroundOperators", SpacingAroundOperators ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+                        key.SetValue("SpacingAfterComma", SpacingAfterComma ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+                        key.SetValue("SpacingInsideParentheses", SpacingInsideParentheses ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+                        key.SetValue("CommentStyle", CommentStyle, Microsoft.Win32.RegistryValueKind.String);
+                        key.SetValue("DeclarationsOptionExplicit", DeclarationsOptionExplicit, Microsoft.Win32.RegistryValueKind.String);
+                        key.SetValue("MiscRemoveTrailingWhitespace", MiscRemoveTrailingWhitespace ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+                        key.SetValue("MiscEnsureFinalNewline", MiscEnsureFinalNewline ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+                        key.SetValue("CommandBarShowFormatProcedure", CommandBarShowFormatProcedure ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+                        key.SetValue("CommandBarShowFormatFile", CommandBarShowFormatFile ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
 
                         // Code Library settings
                         string pathsData = string.Join("|", CodeLibraryPaths.ToArray());

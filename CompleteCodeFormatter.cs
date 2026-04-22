@@ -13,9 +13,182 @@ namespace VBEAddIn
     [ClassInterface(ClassInterfaceType.AutoDual)]
     public class CompleteCodeFormatter
     {
-        private const string TAB = "    "; // 4 spaties
+        private static string IndentUnit =>
+            FormatterSettings.IndentType == "tabs"
+                ? "\t"
+                : new string(' ', Math.Max(1, FormatterSettings.IndentSize));
 
-        public string FormatCode(CodeModule codeModule)
+        /// <summary>
+        /// Formatteert alleen de procedure waar de cursor in staat.
+        /// Toont eerst een bevestigingsdialog met naam en scope.
+        /// </summary>
+        public string FormatProcedure(VBE vbe)
+        {
+            if (vbe == null || vbe.ActiveCodePane == null)
+                return "Geen actieve code module.";
+
+            var codePane = vbe.ActiveCodePane;
+            var codeModule = codePane.CodeModule;
+
+            int cursorLine, dummy1, dummy2, dummy3;
+            codePane.GetSelection(out cursorLine, out dummy1, out dummy2, out dummy3);
+
+            int totalLines = codeModule.CountOfLines;
+            int procStart = -1, procEnd = -1;
+            string procName = "Onbekend";
+
+            for (int i = cursorLine; i >= 1; i--)
+            {
+                string upper = codeModule.Lines[i, 1].Trim().ToUpper();
+                if (Regex.IsMatch(upper, @"^(PUBLIC|PRIVATE|FRIEND)?\s*(SUB|FUNCTION|PROPERTY)\s+"))
+                {
+                    var m = Regex.Match(codeModule.Lines[i, 1].Trim(),
+                        @"(?:Public|Private|Friend)?\s*(?:Sub|Function|Property(?:\s+\w+)?)\s+(\w+)",
+                        RegexOptions.IgnoreCase);
+                    if (m.Success) procName = m.Groups[1].Value;
+                    procStart = i;
+                    break;
+                }
+            }
+
+            if (procStart < 0)
+            {
+                System.Windows.Forms.MessageBox.Show(
+                    "Cursor staat niet in een procedure.",
+                    "Geen procedure",
+                    System.Windows.Forms.MessageBoxButtons.OK,
+                    System.Windows.Forms.MessageBoxIcon.Information);
+                return "Cursor staat niet in een procedure.";
+            }
+
+            for (int i = cursorLine; i <= totalLines; i++)
+            {
+                string upper = codeModule.Lines[i, 1].Trim().ToUpper();
+                if (Regex.IsMatch(upper, @"^END\s+(SUB|FUNCTION|PROPERTY)"))
+                {
+                    procEnd = i;
+                    break;
+                }
+            }
+
+            if (procEnd < 0)
+            {
+                System.Windows.Forms.MessageBox.Show(
+                    "Einde van procedure niet gevonden.",
+                    "Fout",
+                    System.Windows.Forms.MessageBoxButtons.OK,
+                    System.Windows.Forms.MessageBoxIcon.Warning);
+                return "Einde van procedure niet gevonden.";
+            }
+
+            string moduleName = codeModule.Name;
+            int procCount = procEnd - procStart + 1;
+
+            var confirm = System.Windows.Forms.MessageBox.Show(
+                string.Format("Procedure '{0}' in module '{1}' formatteren?\n\nScope: procedure ({2} regels)",
+                    procName, moduleName, procCount),
+                "Bevestig: Procedure",
+                System.Windows.Forms.MessageBoxButtons.OKCancel,
+                System.Windows.Forms.MessageBoxIcon.Question);
+
+            if (confirm != System.Windows.Forms.DialogResult.OK)
+                return "Geannuleerd.";
+
+            var lines = new List<CodeLine>();
+            for (int i = procStart; i <= procEnd; i++)
+                lines.Add(new CodeLine { LineNumber = i, OriginalText = codeModule.Lines[i, 1] });
+
+            SortDeclarationsInProcedures(lines);
+            RemoveExcessiveBlankLines(lines);
+            AddMissingBlankLines(lines);
+            FormatIndentation(lines);
+
+            foreach (var line in lines)
+                if (line.NewText == null && !line.MarkedForDeletion)
+                    line.NewText = line.OriginalText;
+            lines.RemoveAll(l => l.MarkedForDeletion);
+
+            int changes = 0;
+            codeModule.DeleteLines(procStart, procCount);
+            for (int i = 0; i < lines.Count; i++)
+            {
+                codeModule.InsertLines(procStart + i, lines[i].NewText);
+                if (lines[i].NewText != lines[i].OriginalText) changes++;
+            }
+
+            return string.Format("Procedure '{0}' geformatteerd!\n\n{1} regels aangepast\n{2} totale regels",
+                procName, changes, lines.Count);
+        }
+
+        /// <summary>
+        /// Formatteert de gehele huidige module.
+        /// Toont eerst een bevestigingsdialog met naam en scope.
+        /// </summary>
+        public string FormatModule(CodeModule codeModule)
+        {
+            if (codeModule == null)
+                return "Geen code module geselecteerd.";
+
+            var confirm = System.Windows.Forms.MessageBox.Show(
+                string.Format("Module '{0}' formatteren?\n\nScope: gehele module ({1} regels)",
+                    codeModule.Name, codeModule.CountOfLines),
+                "Bevestig: Module",
+                System.Windows.Forms.MessageBoxButtons.OKCancel,
+                System.Windows.Forms.MessageBoxIcon.Question);
+
+            if (confirm != System.Windows.Forms.DialogResult.OK)
+                return "Geannuleerd.";
+
+            return ExecuteFormat(codeModule);
+        }
+
+        /// <summary>
+        /// Formatteert alle modules in het actieve VBA-project.
+        /// Toont eerst een bevestigingsdialog met projectnaam en scope.
+        /// </summary>
+        public string FormatFile(VBE vbe)
+        {
+            if (vbe == null || vbe.ActiveVBProject == null)
+                return "Geen actief VBA project.";
+
+            var project = vbe.ActiveVBProject;
+            var formattable = new List<VBComponent>();
+            foreach (VBComponent comp in project.VBComponents)
+                if (comp.CodeModule.CountOfLines > 0)
+                    formattable.Add(comp);
+
+            if (formattable.Count == 0)
+                return "Geen modules gevonden in project.";
+
+            var confirm = System.Windows.Forms.MessageBox.Show(
+                string.Format("Alle {0} modules in project '{1}' formatteren?\n\nScope: volledig VBA-bestand",
+                    formattable.Count, project.Name),
+                "Bevestig: Volledig VBA-bestand",
+                System.Windows.Forms.MessageBoxButtons.OKCancel,
+                System.Windows.Forms.MessageBoxIcon.Question);
+
+            if (confirm != System.Windows.Forms.DialogResult.OK)
+                return "Geannuleerd.";
+
+            var results = new System.Text.StringBuilder();
+            foreach (var comp in formattable)
+            {
+                try
+                {
+                    string r = ExecuteFormat(comp.CodeModule);
+                    results.AppendLine(comp.Name + ": " + r);
+                }
+                catch (Exception ex)
+                {
+                    results.AppendLine(comp.Name + ": FOUT - " + ex.Message);
+                }
+            }
+
+            return string.Format("{0} modules geformatteerd in project '{1}'.\n\n{2}",
+                formattable.Count, project.Name, results.ToString().TrimEnd());
+        }
+
+        private string ExecuteFormat(CodeModule codeModule)
         {
             if (codeModule == null)
                 return "Geen code module geselecteerd.";
@@ -45,19 +218,40 @@ namespace VBEAddIn
             // Stap 5: Formatteer indentatie
             FormatIndentation(lines);
 
-            // Stap 6: Zorg dat alle regels een NewText hebben (tenzij gemarkeerd voor verwijdering)
+            // Stap 6: Zorg dat alle regels een NewText hebben
             foreach (var line in lines)
             {
                 if (line.NewText == null && !line.MarkedForDeletion && line.OriginalText != null)
-                {
-                    // Regel is niet gemarkeerd voor verwijdering en heeft geen nieuwe tekst
-                    // Gebruik originele tekst
                     line.NewText = line.OriginalText;
-                }
             }
 
-            // Stap 7: Verwijder regels die expliciet gemarkeerd zijn voor verwijdering
+            // Stap 7: Verwijder regels die gemarkeerd zijn voor verwijdering
             lines.RemoveAll(line => line.MarkedForDeletion);
+
+            // Stap 8 (optioneel): Keyword casing
+            if (FormatterSettings.KeywordsCase != "preserve")
+                ApplyKeywordCasing(lines);
+
+            // Stap 9 (optioneel): Spaties
+            if (FormatterSettings.SpacingAroundOperators || FormatterSettings.SpacingAfterComma || FormatterSettings.SpacingInsideParentheses)
+                ApplySpacing(lines);
+
+            // Stap 10 (optioneel): Commentaar stijl
+            if (FormatterSettings.CommentStyle != "preserve")
+                ApplyCommentStyle(lines);
+
+            // Stap 11 (optioneel): Option Explicit
+            if (FormatterSettings.DeclarationsOptionExplicit != "preserve")
+                ApplyOptionExplicit(lines);
+
+            // Stap 12 (optioneel): Trailing whitespace
+            if (FormatterSettings.MiscRemoveTrailingWhitespace)
+                foreach (var line in lines)
+                    if (line.NewText != null) line.NewText = line.NewText.TrimEnd();
+
+            // Stap 13 (optioneel): Final newline
+            if (FormatterSettings.MiscEnsureFinalNewline && lines.Count > 0 && !string.IsNullOrEmpty(lines[lines.Count - 1].NewText))
+                lines.Add(new CodeLine { OriginalText = "", NewText = "" });
 
             // Stap 8: Schrijf terug naar code module
             int changes = 0;
@@ -259,10 +453,11 @@ namespace VBEAddIn
                         j--;
                     }
 
-                    // Als meer dan 2 lege regels, verwijder overtollige
-                    if (blankCount > 2)
+                    // Als meer dan max lege regels, verwijder overtollige
+                    int maxBlank = Math.Max(0, FormatterSettings.MiscKeepBlankLinesMax);
+                    if (blankCount > maxBlank)
                     {
-                        int toRemove = blankCount - 2;
+                        int toRemove = blankCount - maxBlank;
                         for (int k = 0; k < toRemove && i < lines.Count; k++)
                         {
                             lines[i].MarkedForDeletion = true;
@@ -310,35 +505,30 @@ namespace VBEAddIn
 
         private void AddMissingBlankLines(List<CodeLine> lines)
         {
-            // Voeg lege regel toe tussen verschillende procedures
+            int wantedBlanks = FormatterSettings.BlockBlankLinesBetweenProcedures;
+
             for (int i = lines.Count - 1; i >= 1; i--)
             {
                 string current = lines[i].OriginalText.Trim().ToUpper();
                 string previous = lines[i - 1].OriginalText.Trim().ToUpper();
 
-                // Na End Sub/Function/Property moet een lege regel komen (tenzij einde module)
+                // Na End Sub/Function/Property: voeg gewenst aantal lege regels in
                 if (Regex.IsMatch(previous, @"^END\s+(SUB|FUNCTION|PROPERTY)") &&
                     !string.IsNullOrWhiteSpace(current) &&
                     i < lines.Count - 1)
                 {
-                    lines.Insert(i, new CodeLine
-                    {
-                        OriginalText = "",
-                        NewText = ""
-                    });
+                    for (int b = 0; b < wantedBlanks; b++)
+                        lines.Insert(i, new CodeLine { OriginalText = "", NewText = "" });
                 }
 
-                // Voor nieuwe procedure moet een lege regel komen (tenzij begin module)
+                // Voor nieuwe procedure: voeg gewenst aantal lege regels in
                 if (Regex.IsMatch(current, @"^(PUBLIC|PRIVATE|FRIEND)?\s*(SUB|FUNCTION|PROPERTY)\s+") &&
                     !string.IsNullOrWhiteSpace(previous) &&
                     !Regex.IsMatch(previous, @"^END\s+(SUB|FUNCTION|PROPERTY)") &&
                     i > 0)
                 {
-                    lines.Insert(i, new CodeLine
-                    {
-                        OriginalText = "",
-                        NewText = ""
-                    });
+                    for (int b = 0; b < wantedBlanks; b++)
+                        lines.Insert(i, new CodeLine { OriginalText = "", NewText = "" });
                 }
             }
         }
@@ -366,7 +556,7 @@ namespace VBEAddIn
                 // Commentaar regels - gebruik huidige indent level
                 if (trimmedLine.StartsWith("'"))
                 {
-                    lines[i].NewText = new string(' ', indentLevel * TAB.Length) + trimmedLine;
+                    lines[i].NewText = string.Concat(Enumerable.Repeat(IndentUnit, indentLevel)) + trimmedLine;
                     continue;
                 }
 
@@ -377,7 +567,7 @@ namespace VBEAddIn
                 int newIndentLevel = CalculateIndentLevel(lineForAnalysis, ref indentLevel, ref inProcedure);
 
                 // Maak nieuwe regel met correcte indentatie
-                lines[i].NewText = new string(' ', newIndentLevel * TAB.Length) + trimmedLine;
+                lines[i].NewText = string.Concat(Enumerable.Repeat(IndentUnit, newIndentLevel)) + trimmedLine;
             }
         }
 
@@ -589,6 +779,246 @@ namespace VBEAddIn
             return Regex.IsMatch(upper, @"^(PUBLIC|PRIVATE)?\s*CONST\s+", RegexOptions.IgnoreCase) &&
                    !upper.StartsWith("'");
         }
+
+        // ── New formatter steps ──────────────────────────────────────────────
+
+        private static readonly HashSet<string> VbaKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "And", "As", "Boolean", "ByRef", "ByVal", "Call", "Case", "Const",
+            "Date", "Debug", "Dim", "Do", "Double", "Each", "Else", "ElseIf",
+            "Empty", "End", "Enum", "Error", "Exit", "False", "For", "Friend",
+            "Function", "Get", "GoTo", "If", "In", "Integer", "Is", "Let",
+            "Like", "Long", "Loop", "Mod", "New", "Next", "Not", "Nothing",
+            "Null", "Object", "On", "Option", "Or", "Private", "Property",
+            "Public", "Resume", "Select", "Set", "Static", "Step", "Stop",
+            "String", "Sub", "Then", "To", "True", "Type", "Until", "Variant",
+            "Wend", "While", "With", "Xor", "WithEvents", "Implements",
+            "Explicit", "Compare", "Base", "Optional", "ParamArray", "Declare",
+            "Lib", "Alias", "AddressOf", "Me", "ByRef", "ByVal"
+        };
+
+        private void ApplyKeywordCasing(List<CodeLine> lines)
+        {
+            string mode = FormatterSettings.KeywordsCase; // "uppercase"|"lowercase"|"pascal"
+            foreach (var cl in lines)
+            {
+                if (cl.MarkedForDeletion) continue;
+                cl.NewText = ApplyKeywordCasingToLine(cl.NewText, mode);
+            }
+        }
+
+        private string ApplyKeywordCasingToLine(string line, string mode)
+        {
+            // Split into tokens preserving delimiters; skip content inside string literals
+            var result = new System.Text.StringBuilder();
+            bool inString = false;
+            int i = 0;
+            while (i < line.Length)
+            {
+                char c = line[i];
+                if (c == '"')
+                {
+                    inString = !inString;
+                    result.Append(c);
+                    i++;
+                    continue;
+                }
+                if (inString)
+                {
+                    result.Append(c);
+                    i++;
+                    continue;
+                }
+                // Comment start — append rest verbatim
+                if (c == '\'')
+                {
+                    result.Append(line.Substring(i));
+                    break;
+                }
+                // Word character?
+                if (char.IsLetter(c) || c == '_')
+                {
+                    int start = i;
+                    while (i < line.Length && (char.IsLetterOrDigit(line[i]) || line[i] == '_'))
+                        i++;
+                    string word = line.Substring(start, i - start);
+                    if (VbaKeywords.Contains(word))
+                    {
+                        switch (mode)
+                        {
+                            case "uppercase": word = word.ToUpper(); break;
+                            case "lowercase": word = word.ToLower(); break;
+                            case "pascal":
+                                // Find the canonical pascal form from the set
+                                foreach (var kw in VbaKeywords)
+                                    if (string.Equals(kw, word, StringComparison.OrdinalIgnoreCase))
+                                    { word = kw; break; }
+                                break;
+                        }
+                    }
+                    result.Append(word);
+                }
+                else
+                {
+                    result.Append(c);
+                    i++;
+                }
+            }
+            return result.ToString();
+        }
+
+        private void ApplySpacing(List<CodeLine> lines)
+        {
+            bool ops = FormatterSettings.SpacingAroundOperators;
+            bool comma = FormatterSettings.SpacingAfterComma;
+            bool parens = FormatterSettings.SpacingInsideParentheses;
+
+            foreach (var cl in lines)
+            {
+                if (cl.MarkedForDeletion) continue;
+                string t = cl.NewText;
+                string code = RemoveInlineComment(t);
+                string comment = t.Length > code.Length ? t.Substring(code.Length) : "";
+
+                if (ops)
+                {
+                    // Ensure spaces around = + - & * / < > but not inside strings
+                    code = ApplyOperatorSpacing(code);
+                }
+                if (comma)
+                {
+                    // Ensure space after comma (outside strings)
+                    code = Regex.Replace(code, @",(?!\s)", ", ");
+                }
+                if (parens)
+                {
+                    // Space after ( and before ) outside strings
+                    code = Regex.Replace(code, @"\((?!\s)", "( ");
+                    code = Regex.Replace(code, @"(?<!\s)\)", " )");
+                }
+                cl.NewText = code + comment;
+            }
+        }
+
+        private string ApplyOperatorSpacing(string code)
+        {
+            // Use regex to add spaces around binary operators: = + - & * / < > <>  <= >=
+            // Skip inside string literals using a character-by-character pass for safety
+            var sb = new System.Text.StringBuilder();
+            bool inStr = false;
+            int i = 0;
+            while (i < code.Length)
+            {
+                char c = code[i];
+                if (c == '"') { inStr = !inStr; sb.Append(c); i++; continue; }
+                if (inStr) { sb.Append(c); i++; continue; }
+
+                // Check for two-char operators first
+                if (i + 1 < code.Length)
+                {
+                    string two = code.Substring(i, 2);
+                    if (two == "<>" || two == "<=" || two == ">=" || two == ":=")
+                    {
+                        // Ensure space before
+                        if (sb.Length > 0 && sb[sb.Length - 1] != ' ')
+                            sb.Append(' ');
+                        sb.Append(two);
+                        i += 2;
+                        // Ensure space after
+                        if (i < code.Length && code[i] != ' ')
+                            sb.Append(' ');
+                        continue;
+                    }
+                }
+
+                if (c == '=' || c == '+' || c == '-' || c == '&' || c == '*' || c == '/' || c == '<' || c == '>')
+                {
+                    // Don't double-space if neighbour is already space
+                    if (sb.Length > 0 && sb[sb.Length - 1] != ' ')
+                        sb.Append(' ');
+                    sb.Append(c);
+                    i++;
+                    if (i < code.Length && code[i] != ' ')
+                        sb.Append(' ');
+                }
+                else
+                {
+                    sb.Append(c);
+                    i++;
+                }
+            }
+            return sb.ToString();
+        }
+
+        private void ApplyCommentStyle(List<CodeLine> lines)
+        {
+            string style = FormatterSettings.CommentStyle;
+            foreach (var cl in lines)
+            {
+                if (cl.MarkedForDeletion) continue;
+                string trimmed = cl.NewText.TrimStart();
+                string indent = cl.NewText.Substring(0, cl.NewText.Length - trimmed.Length);
+
+                if (style == "apostrophe" && Regex.IsMatch(trimmed, @"^Rem\s", RegexOptions.IgnoreCase))
+                {
+                    string rest = trimmed.Substring(trimmed.IndexOf(' ') + 1);
+                    cl.NewText = indent + "' " + rest;
+                }
+                else if (style == "rem" && trimmed.StartsWith("'"))
+                {
+                    string rest = trimmed.TrimStart('\'').TrimStart();
+                    cl.NewText = indent + "Rem " + rest;
+                }
+            }
+        }
+
+        private void ApplyOptionExplicit(List<CodeLine> lines)
+        {
+            string setting = FormatterSettings.DeclarationsOptionExplicit;
+            if (setting == "preserve") return;
+
+            // Find existing Option Explicit line
+            int existingIndex = -1;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (!lines[i].MarkedForDeletion &&
+                    Regex.IsMatch(lines[i].NewText.Trim(), @"^Option\s+Explicit\s*$", RegexOptions.IgnoreCase))
+                {
+                    existingIndex = i;
+                    break;
+                }
+            }
+
+            if (setting == "remove" && existingIndex >= 0)
+            {
+                lines[existingIndex].MarkedForDeletion = true;
+            }
+            else if (setting == "require" && existingIndex < 0)
+            {
+                // Insert at the top (after any initial blank lines or Option Compare etc.)
+                int insertAt = 0;
+                for (int i = 0; i < lines.Count; i++)
+                {
+                    string t = lines[i].NewText.Trim();
+                    if (t == "" || Regex.IsMatch(t, @"^Option\s+", RegexOptions.IgnoreCase) ||
+                        Regex.IsMatch(t, @"^'", RegexOptions.IgnoreCase))
+                        insertAt = i + 1;
+                    else
+                        break;
+                }
+                // Build a synthetic CodeLine
+                var newLine = new CodeLine
+                {
+                    LineNumber = 0,
+                    OriginalText = "Option Explicit",
+                    NewText = "Option Explicit",
+                    MarkedForDeletion = false
+                };
+                lines.Insert(insertAt, newLine);
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
 
         private class CodeLine
         {

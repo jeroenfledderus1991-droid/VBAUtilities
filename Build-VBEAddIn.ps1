@@ -1,10 +1,11 @@
 ﻿# Build-VBEAddIn.ps1
-# Bouwt de VBE Add-in + installer
+# Bouwt de VBE Add-in + installer (met framework check)
 
 param(
     [switch]$Release = $true,
     [switch]$Debug = $false,
-    [int]$KeepInstallerVersions = 9
+    [int]$KeepInstallerVersions = 9,
+    [switch]$AllowRetargetTo48 = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,9 +13,7 @@ $ErrorActionPreference = "Stop"
 $config = if ($Debug) { "Debug" } else { "Release" }
 
 function Get-CurrentVersion {
-    param(
-        [string]$ProjectRoot
-    )
+    param([string]$ProjectRoot)
 
     $changelogDataPath = Join-Path $ProjectRoot "ChangelogData.cs"
     if (-not (Test-Path $changelogDataPath)) {
@@ -30,10 +29,7 @@ function Get-CurrentVersion {
 }
 
 function New-VersionedInstallerCopy {
-    param(
-        [string]$InstallerPath,
-        [string]$Version
-    )
+    param([string]$InstallerPath, [string]$Version)
 
     $installerDirectory = Split-Path -Parent $InstallerPath
     $versionedInstallerPath = Join-Path $installerDirectory ("VBEAddIn-Installer-{0}.exe" -f $Version)
@@ -42,14 +38,9 @@ function New-VersionedInstallerCopy {
 }
 
 function Remove-OldVersionedInstallers {
-    param(
-        [string]$InstallerDirectory,
-        [int]$KeepCount
-    )
+    param([string]$InstallerDirectory, [int]$KeepCount)
 
-    if ($KeepCount -lt 1) {
-        return @()
-    }
+    if ($KeepCount -lt 1) { return @() }
 
     $versionedInstallers = Get-ChildItem -Path $InstallerDirectory -Filter 'VBEAddIn-Installer-*.exe' -File |
         Sort-Object LastWriteTime -Descending
@@ -62,10 +53,40 @@ function Remove-OldVersionedInstallers {
     return $installersToRemove
 }
 
+function Test-TargetingPack {
+    param([string]$Version) # "4.8.1" or "4.8"
+
+    $refPath = "C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v$Version"
+    return (Test-Path $refPath)
+}
+
+function Ensure-FrameworkTarget {
+    param(
+        [string]$ProjectPath,
+        [string]$DesiredVersion = "4.8.1",
+        [switch]$AllowRetargetTo48
+    )
+
+    if (Test-TargetingPack $DesiredVersion) { return $DesiredVersion }
+
+    if ($AllowRetargetTo48 -and (Test-TargetingPack "4.8")) {
+        # retarget csproj to v4.8
+        (Get-Content $ProjectPath) -replace '<TargetFrameworkVersion>v4\.8\.1</TargetFrameworkVersion>', '<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>' |
+            Set-Content $ProjectPath -Encoding UTF8
+        return "4.8"
+    }
+
+    Write-Host "ERROR: .NET Framework $DesiredVersion Targeting Pack ontbreekt." -ForegroundColor Red
+    Write-Host "Installeer de Developer Pack (SDK/Targeting Pack): https://aka.ms/msbuild/developerpacks" -ForegroundColor Yellow
+    if ($AllowRetargetTo48) {
+        Write-Host "Tip: installeer 4.8.1 of zorg dat 4.8 aanwezig is." -ForegroundColor Yellow
+    }
+    exit 1
+}
+
 Write-Host "`n=== VBE Add-in Builder ===" -ForegroundColor Cyan
 Write-Host "Configuratie: $config`n" -ForegroundColor Gray
 
-# MSBuild pad (gebruik de moderne versie)
 $msbuild = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
 if (-not (Test-Path $msbuild)) {
     Write-Host "ERROR: MSBuild niet gevonden op $msbuild" -ForegroundColor Red
@@ -73,27 +94,28 @@ if (-not (Test-Path $msbuild)) {
 }
 Write-Host "MSBuild gevonden: $msbuild`n" -ForegroundColor Gray
 
-# Naar scriptdirectory gaan (waar het project staat)
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptPath
 Write-Host "Werkmap: $(Get-Location)`n" -ForegroundColor Gray
 
+# Zorg dat target framework beschikbaar is (VBEAddIn + Installer)
+$tf1 = Ensure-FrameworkTarget -ProjectPath ".\VBEAddIn.csproj" -AllowRetargetTo48:$AllowRetargetTo48
+$tf2 = Ensure-FrameworkTarget -ProjectPath ".\Installer\Installer.csproj" -AllowRetargetTo48:$AllowRetargetTo48
+Write-Host "TargetFramework: VBEAddIn=$tf1, Installer=$tf2`n" -ForegroundColor Gray
+
 $currentVersion = Get-CurrentVersion -ProjectRoot $scriptPath
 Write-Host "Versie: $currentVersion`n" -ForegroundColor Gray
 
-# 1. Bouw het VBEAddIn-project
 Write-Host "[1/2] Building VBEAddIn project..." -ForegroundColor Yellow
 & $msbuild ".\VBEAddIn.csproj" /p:Configuration=$config /t:Clean,Build /nologo /v:minimal
 if ($LASTEXITCODE -ne 0) { Write-Host "`n✗ VBEAddIn project build FAILED" -ForegroundColor Red; exit 1 }
 Write-Host "✓ VBEAddIn.dll gebouwd`n" -ForegroundColor Green
 
-# 2. Bouw de installer
 Write-Host "[2/2] Building Installer..." -ForegroundColor Yellow
 & $msbuild ".\Installer\Installer.csproj" /p:Configuration=$config /t:Rebuild /nologo /v:minimal
 if ($LASTEXITCODE -ne 0) { Write-Host "`n✗ Installer build FAILED" -ForegroundColor Red; exit 1 }
 Write-Host "✓ Installer gebouwd`n" -ForegroundColor Green
 
-# Output tonen
 $installerPath = ".\Installer\bin\$config\VBEAddIn-Installer.exe"
 $dllPath = ".\bin\$config\VBEAddIn.dll"
 
