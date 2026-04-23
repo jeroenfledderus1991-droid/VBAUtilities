@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Reflection;
 using System.Diagnostics;
@@ -1338,12 +1340,13 @@ namespace VBEAddIn
                 string lastPromptVersion = FormatterSettings.LastGitHubPromptVersion;
                 string lastPromptUtcRaw = FormatterSettings.LastGitHubPromptUtc;
 
+                List<GitHubReleaseInfo> releases;
                 string latest;
                 string releaseUrl;
                 string installerUrl;
                 string failureReason;
 
-                if (!GitHubReleaseChecker.TryGetLatestRelease(out latest, out releaseUrl, out installerUrl, out failureReason))
+                if (!GitHubReleaseChecker.TryGetAvailableReleases(out releases, out failureReason))
                 {
                     WriteDebug("GitHub update-check overgeslagen: " + failureReason);
 
@@ -1360,19 +1363,20 @@ namespace VBEAddIn
                     return;
                 }
 
-                if (!GitHubReleaseChecker.IsRemoteNewer(current, latest))
+                GitHubReleaseInfo latestRelease = releases.FirstOrDefault();
+                if (latestRelease == null)
                 {
-                    if (isManual)
-                    {
-                        System.Windows.Forms.MessageBox.Show(
-                            "Je gebruikt al de nieuwste versie." + Environment.NewLine +
-                            "Huidige versie: " + current + Environment.NewLine +
-                            "Nieuwste versie: " + latest,
-                            "Geen update beschikbaar",
-                            System.Windows.Forms.MessageBoxButtons.OK,
-                            System.Windows.Forms.MessageBoxIcon.Information);
-                    }
+                    return;
+                }
 
+                latest = latestRelease.Version;
+                releaseUrl = latestRelease.ReleaseUrl;
+                installerUrl = latestRelease.InstallerUrl;
+
+                bool hasNewerVersion = GitHubReleaseChecker.IsRemoteNewer(current, latest);
+
+                if (!hasNewerVersion && !isManual)
+                {
                     return;
                 }
 
@@ -1392,39 +1396,41 @@ namespace VBEAddIn
                     }
                 }
 
-                System.Windows.Forms.DialogResult result = System.Windows.Forms.MessageBox.Show(
-                    "Er is een nieuwe versie beschikbaar op GitHub." + Environment.NewLine +
-                    "Huidige versie: " + current + Environment.NewLine +
-                    "Nieuwste versie: " + latest + Environment.NewLine + Environment.NewLine +
-                    "Ja = download installer" + Environment.NewLine +
-                    "Nee = niet opnieuw tonen voor versie " + latest + Environment.NewLine +
-                    "Annuleren = herinner me over " + remindEveryDays + " dagen",
-                    "Update beschikbaar",
-                    System.Windows.Forms.MessageBoxButtons.YesNoCancel,
-                    System.Windows.Forms.MessageBoxIcon.Information);
-
-                // Registreer dat deze versie nu getoond is.
-                FormatterSettings.LastGitHubPromptVersion = latest;
-                FormatterSettings.LastGitHubPromptUtc = DateTime.UtcNow.ToString("o");
-
-                if (result == System.Windows.Forms.DialogResult.Yes)
+                using (UpdateReleaseForm dialog = new UpdateReleaseForm(current, latest, releases, hasNewerVersion))
                 {
-                    string urlToOpen = !string.IsNullOrWhiteSpace(installerUrl) ? installerUrl : releaseUrl;
-                    if (!string.IsNullOrWhiteSpace(urlToOpen))
+                    System.Windows.Forms.DialogResult result = dialog.ShowDialog();
+
+                    // Registreer dat deze versie nu getoond is.
+                    FormatterSettings.LastGitHubPromptVersion = latest;
+                    FormatterSettings.LastGitHubPromptUtc = DateTime.UtcNow.ToString("o");
+
+                    if (result == System.Windows.Forms.DialogResult.OK)
                     {
-                        Process.Start(urlToOpen);
-                    }
+                        GitHubReleaseInfo selectedRelease = dialog.SelectedRelease ?? latestRelease;
+                        string urlToOpen = !string.IsNullOrWhiteSpace(selectedRelease.InstallerUrl)
+                            ? selectedRelease.InstallerUrl
+                            : selectedRelease.ReleaseUrl;
 
-                    FormatterSettings.SaveToRegistry();
-                }
-                else if (result == System.Windows.Forms.DialogResult.No)
-                {
-                    FormatterSettings.IgnoredGitHubVersion = latest;
-                    FormatterSettings.SaveToRegistry();
-                }
-                else
-                {
-                    FormatterSettings.SaveToRegistry();
+                        if (!string.IsNullOrWhiteSpace(urlToOpen))
+                        {
+                            Process.Start(new ProcessStartInfo
+                            {
+                                FileName = urlToOpen,
+                                UseShellExecute = true
+                            });
+                        }
+
+                        FormatterSettings.SaveToRegistry();
+                    }
+                    else if (result == System.Windows.Forms.DialogResult.No && dialog.IgnoreLatestVersion)
+                    {
+                        FormatterSettings.IgnoredGitHubVersion = latest;
+                        FormatterSettings.SaveToRegistry();
+                    }
+                    else
+                    {
+                        FormatterSettings.SaveToRegistry();
+                    }
                 }
             }
             catch (Exception ex)

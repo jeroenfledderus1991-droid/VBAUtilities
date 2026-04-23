@@ -4,7 +4,6 @@
 param(
     [switch]$Release = $true,
     [switch]$Debug = $false,
-    [int]$KeepInstallerVersions = 9,
     [switch]$AllowRetargetTo48 = $false
 )
 
@@ -28,29 +27,24 @@ function Get-CurrentVersion {
     return $match.Matches[0].Groups[1].Value
 }
 
-function New-VersionedInstallerCopy {
-    param([string]$InstallerPath, [string]$Version)
+function New-VersionFolderInstallerCopy {
+    param(
+        [string]$InstallerPath,
+        [string]$Version
+    )
 
     $installerDirectory = Split-Path -Parent $InstallerPath
-    $versionedInstallerPath = Join-Path $installerDirectory ("VBEAddIn-Installer-{0}.exe" -f $Version)
-    Copy-Item -Path $InstallerPath -Destination $versionedInstallerPath -Force
-    return $versionedInstallerPath
-}
+    $versionRoot = Join-Path $installerDirectory "versions"
+    $versionDirectory = Join-Path $versionRoot $Version
 
-function Remove-OldVersionedInstallers {
-    param([string]$InstallerDirectory, [int]$KeepCount)
-
-    if ($KeepCount -lt 1) { return @() }
-
-    $versionedInstallers = Get-ChildItem -Path $InstallerDirectory -Filter 'VBEAddIn-Installer-*.exe' -File |
-        Sort-Object LastWriteTime -Descending
-
-    $installersToRemove = $versionedInstallers | Select-Object -Skip $KeepCount
-    foreach ($installer in $installersToRemove) {
-        Remove-Item -Path $installer.FullName -Force
+    if (-not (Test-Path $versionDirectory)) {
+        New-Item -Path $versionDirectory -ItemType Directory -Force | Out-Null
     }
 
-    return $installersToRemove
+    $destination = Join-Path $versionDirectory "VBEAddIn-Installer.exe"
+    Copy-Item -Path $InstallerPath -Destination $destination -Force
+
+    return $destination
 }
 
 function Test-TargetingPack {
@@ -124,16 +118,11 @@ Write-Host "`nOutput:" -ForegroundColor Cyan
 
 if (Test-Path $installerPath) {
     $installerFile = Get-Item $installerPath
-    $versionedInstallerPath = New-VersionedInstallerCopy -InstallerPath $installerFile.FullName -Version $currentVersion
-    $removedInstallers = Remove-OldVersionedInstallers -InstallerDirectory $installerFile.DirectoryName -KeepCount $KeepInstallerVersions
+    $versionedInstallerPath = New-VersionFolderInstallerCopy -InstallerPath $installerFile.FullName -Version $currentVersion
 
     Write-Host "  Installer: $installerPath" -ForegroundColor Gray
     Write-Host "             $([math]::Round($installerFile.Length / 1KB, 2)) KB - $($installerFile.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))" -ForegroundColor Gray
-    Write-Host "  Versie:    $versionedInstallerPath" -ForegroundColor Gray
-
-    if ($removedInstallers.Count -gt 0) {
-        Write-Host "  Opgeschoond: $($removedInstallers.Count) oudere installer-versie(s) verwijderd" -ForegroundColor Gray
-    }
+    Write-Host "  Versiepad: $versionedInstallerPath" -ForegroundColor Gray
 } else {
     Write-Host "  WARNING: Installer niet gevonden op $installerPath" -ForegroundColor Yellow
 }

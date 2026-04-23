@@ -39,21 +39,20 @@ jobs:
             Write-Error "Installer not found at $path"
           }
 
-      - name: Prepare versioned installer asset
-        id: prepare_asset
+      - name: Create version folder copy
         shell: pwsh
         env:
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          $source = "Installer/bin/Release/VBEAddIn-Installer.exe"
           $version = "$env:TAG_NAME"
           if ($version.StartsWith("v", [System.StringComparison]::OrdinalIgnoreCase)) {
             $version = $version.Substring(1)
           }
 
-          $versioned = "Installer/bin/Release/VBEAddIn-Installer-$version.exe"
-          Copy-Item -Path $source -Destination $versioned -Force
-          "versioned_installer=$versioned" >> $env:GITHUB_OUTPUT
+          $source = "Installer/bin/Release/VBEAddIn-Installer.exe"
+          $destinationDir = "Installer/bin/Release/versions/$version"
+          New-Item -Path $destinationDir -ItemType Directory -Force | Out-Null
+          Copy-Item -Path $source -Destination "$destinationDir/VBEAddIn-Installer.exe" -Force
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
@@ -62,7 +61,7 @@ jobs:
           name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            ${{ steps.prepare_asset.outputs.versioned_installer }}
+            Installer/bin/Release/VBEAddIn-Installer.exe
           fail_on_unmatched_files: true
 
       - name: Keep latest 9 releases

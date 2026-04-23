@@ -38,6 +38,7 @@
     <Reference Include="System.Drawing" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="System.Xml.Linq" />
@@ -78,6 +79,7 @@
     <Compile Include="InsertCommentUtility.cs" />
     <Compile Include="VBAPasswordRemoverUtility.cs" />
     <Compile Include="GitHubReleaseChecker.cs" />
+    <Compile Include="UpdateReleaseForm.cs" />
     <Compile Include="ChangelogData.cs" />
     <Compile Include="ChangelogForm.cs" />
     <Compile Include="WhatsNewForm.cs" />
