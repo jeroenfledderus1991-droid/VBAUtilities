@@ -101,20 +101,24 @@ namespace VBEAddIn
             SortDeclarationsInProcedures(lines);
             RemoveExcessiveBlankLines(lines);
             AddMissingBlankLines(lines);
+            RemoveOrphanContinuationFragments(lines);
             FormatIndentation(lines);
 
             foreach (var line in lines)
                 if (line.NewText == null && !line.MarkedForDeletion)
                     line.NewText = line.OriginalText;
             lines.RemoveAll(l => l.MarkedForDeletion);
+            RemoveOrphanFragmentsFromFinalOutput(lines);
 
-            int changes = 0;
+            int changes = lines.Count(l => l.NewText != l.OriginalText);
             codeModule.DeleteLines(procStart, procCount);
-            for (int i = 0; i < lines.Count; i++)
+            if (lines.Count > 0)
             {
-                codeModule.InsertLines(procStart + i, lines[i].NewText);
-                if (lines[i].NewText != lines[i].OriginalText) changes++;
+                string outputBlock = string.Join("\r\n", lines.Select(l => l.NewText ?? string.Empty));
+                codeModule.InsertLines(procStart, outputBlock);
             }
+
+            CleanupOrphanLinesInCodeModule(codeModule);
 
             return string.Format("Procedure '{0}' geformatteerd!\n\n{1} regels aangepast\n{2} totale regels",
                 procName, changes, lines.Count);
@@ -215,6 +219,9 @@ namespace VBEAddIn
             // Stap 4: Voeg ontbrekende lege regels toe
             AddMissingBlankLines(lines);
 
+            // Stap 4b: Ruim losgeraakte continuation-fragmenten op
+            RemoveOrphanContinuationFragments(lines);
+
             // Stap 5: Formatteer indentatie
             FormatIndentation(lines);
 
@@ -249,13 +256,15 @@ namespace VBEAddIn
                 foreach (var line in lines)
                     if (line.NewText != null) line.NewText = line.NewText.TrimEnd();
 
+            // Stap 12b: Laatste veiligheidsnet op eindoutput
+            RemoveOrphanFragmentsFromFinalOutput(lines);
+
             // Stap 13 (optioneel): Final newline
             if (FormatterSettings.MiscEnsureFinalNewline && lines.Count > 0 && !string.IsNullOrEmpty(lines[lines.Count - 1].NewText))
                 lines.Add(new CodeLine { OriginalText = "", NewText = "" });
 
             // Stap 8: Schrijf terug naar code module
-            int changes = 0;
-            int lineIndex = 0;
+            int changes = lines.Count(l => l.NewText != l.OriginalText);
             
             // Eerst alle oude regels verwijderen van achter naar voor
             for (int i = totalLines; i >= 1; i--)
@@ -263,17 +272,73 @@ namespace VBEAddIn
                 codeModule.DeleteLines(i, 1);
             }
 
-            // Dan nieuwe regels invoegen
-            foreach (var line in lines)
+            // Dan nieuwe regels in 1 batch invoegen (voorkomt VBE continuation-artefacten)
+            if (lines.Count > 0)
             {
-                codeModule.InsertLines(lineIndex + 1, line.NewText);
-                lineIndex++;
-                if (line.NewText != line.OriginalText)
-                    changes++;
+                string outputBlock = string.Join("\r\n", lines.Select(l => l.NewText ?? string.Empty));
+                codeModule.InsertLines(1, outputBlock);
             }
+
+            CleanupOrphanLinesInCodeModule(codeModule);
 
             return string.Format("Code formatting voltooid!\n\n{0} regels aangepast\n{1} totale regels",
                 changes, lines.Count);
+        }
+
+        private int CleanupOrphanLinesInCodeModule(CodeModule codeModule)
+        {
+            int removed = 0;
+            int i = 1;
+            bool inProcedure = false;
+            bool inProcedureHeader = false;
+
+            while (i <= codeModule.CountOfLines)
+            {
+                string current = codeModule.Lines[i, 1].Trim();
+                string upper = current.ToUpper();
+
+                if (current.Length == 0)
+                {
+                    i++;
+                    continue;
+                }
+
+                if (!inProcedure &&
+                    Regex.IsMatch(upper, @"^(PUBLIC|PRIVATE|FRIEND)?\s*(SUB|FUNCTION|PROPERTY)\s+"))
+                {
+                    inProcedure = true;
+                    inProcedureHeader = IsLineContinuation(current);
+                    i++;
+                    continue;
+                }
+
+                if (inProcedureHeader)
+                {
+                    inProcedureHeader = IsLineContinuation(current);
+                    i++;
+                    continue;
+                }
+
+                if (inProcedure && Regex.IsMatch(upper, @"^END\s+(SUB|FUNCTION|PROPERTY)\s*$"))
+                {
+                    inProcedure = false;
+                    inProcedureHeader = false;
+                    i++;
+                    continue;
+                }
+
+                if (!inProcedure &&
+                    Regex.IsMatch(current, @"^(BYVAL|BYREF|OPTIONAL|PARAMARRAY)\s+", RegexOptions.IgnoreCase))
+                {
+                    codeModule.DeleteLines(i, 1);
+                    removed++;
+                    continue;
+                }
+
+                i++;
+            }
+
+            return removed;
         }
 
         private void SortDeclarationsInProcedures(List<CodeLine> lines)
@@ -288,15 +353,20 @@ namespace VBEAddIn
             {
                 string trimmed = lines[i].OriginalText.Trim();
                 string upper = trimmed.ToUpper();
+                bool continuesPreviousLine = IsContinuationFollower(lines, i);
+
+                if (continuesPreviousLine)
+                    continue;
 
                 // Procedure start
                 if (Regex.IsMatch(upper, @"^(PUBLIC|PRIVATE|FRIEND)?\s*(SUB|FUNCTION|PROPERTY)\s+"))
                 {
                     inProcedure = true;
-                    procedureStart = i;
+                    procedureStart = GetContinuationBlockEndIndex(lines, i);
                     dims.Clear();
                     consts.Clear();
                     declarationIndices.Clear();
+                    i = procedureStart;
                     continue;
                 }
 
@@ -365,7 +435,17 @@ namespace VBEAddIn
                 // Zoek Dim/Const binnen procedure
                 if (inProcedure && i > procedureStart)
                 {
-                    if (IsDimStatement(trimmed))
+                    bool continuesPreviousLineInProcedure = IsContinuationFollower(lines, i);
+                    bool hasLineContinuation = IsLineContinuation(lines[i].OriginalText);
+
+                    // Regels die deel uitmaken van een line-continuation blok niet los behandelen.
+                    // Anders kan een deel van het statement verplaatst worden en de rest achterblijven.
+                    if (continuesPreviousLineInProcedure)
+                    {
+                        continue;
+                    }
+
+                    if (IsDimStatement(trimmed) && !hasLineContinuation)
                     {
                         DimStatement dimStmt = ParseDimStatement(trimmed);
                         if (dimStmt != null)
@@ -374,7 +454,7 @@ namespace VBEAddIn
                             declarationIndices.Add(i);
                         }
                     }
-                    else if (IsConstStatement(trimmed))
+                    else if (IsConstStatement(trimmed) && !hasLineContinuation)
                     {
                         consts.Add(lines[i]);
                         declarationIndices.Add(i);
@@ -473,20 +553,25 @@ namespace VBEAddIn
 
             for (int i = 0; i < lines.Count; i++)
             {
+                if (IsContinuationFollower(lines, i))
+                    continue;
+
                 string upper = lines[i].OriginalText.Trim().ToUpper();
 
                 if (Regex.IsMatch(upper, @"^(PUBLIC|PRIVATE|FRIEND)?\s*(SUB|FUNCTION|PROPERTY)\s+"))
                 {
                     inProcedure = true;
-                    procedureStart = i;
+                    procedureStart = GetContinuationBlockEndIndex(lines, i);
 
-                    // Verwijder lege regels direct na procedure header
-                    int j = i + 1;
+                    // Verwijder lege regels direct na volledige procedure header
+                    int j = procedureStart + 1;
                     while (j < lines.Count && string.IsNullOrWhiteSpace(lines[j].OriginalText))
                     {
                         lines[j].MarkedForDeletion = true;
                         j++;
                     }
+
+                    i = procedureStart;
                 }
 
                 if (inProcedure && Regex.IsMatch(upper, @"^END\s+(SUB|FUNCTION|PROPERTY)"))
@@ -509,6 +594,9 @@ namespace VBEAddIn
 
             for (int i = lines.Count - 1; i >= 1; i--)
             {
+                if (IsContinuationFollower(lines, i) || IsContinuationFollower(lines, i - 1))
+                    continue;
+
                 string current = lines[i].OriginalText.Trim().ToUpper();
                 string previous = lines[i - 1].OriginalText.Trim().ToUpper();
 
@@ -542,6 +630,13 @@ namespace VBEAddIn
             {
                 if (lines[i].MarkedForDeletion) continue;
 
+                if (IsContinuationFollower(lines, i))
+                {
+                    if (inDeclBlock)
+                        lastDeclIdx = i;
+                    continue;
+                }
+
                 string upper = lines[i].OriginalText.Trim().ToUpper();
 
                 if (Regex.IsMatch(upper, @"^(PUBLIC|PRIVATE|FRIEND)?\s*(SUB|FUNCTION|PROPERTY)\s+"))
@@ -549,6 +644,7 @@ namespace VBEAddIn
                     inProc = true;
                     inDeclBlock = false;
                     lastDeclIdx = -1;
+                    i = GetContinuationBlockEndIndex(lines, i);
                     continue;
                 }
 
@@ -625,6 +721,41 @@ namespace VBEAddIn
 
                 // Maak nieuwe regel met correcte indentatie
                 lines[i].NewText = string.Concat(Enumerable.Repeat(IndentUnit, newIndentLevel)) + trimmedLine;
+            }
+        }
+
+        private void RemoveOrphanContinuationFragments(List<CodeLine> lines)
+        {
+            bool inProcedure = false;
+
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (lines[i].MarkedForDeletion)
+                    continue;
+
+                string trimmed = lines[i].OriginalText.Trim();
+                string upper = trimmed.ToUpper();
+
+                if (!IsContinuationFollower(lines, i) &&
+                    Regex.IsMatch(upper, @"^(PUBLIC|PRIVATE|FRIEND)?\s*(SUB|FUNCTION|PROPERTY)\s+"))
+                {
+                    inProcedure = true;
+                    continue;
+                }
+
+                if (inProcedure && Regex.IsMatch(upper, @"^END\s+(SUB|FUNCTION|PROPERTY)"))
+                {
+                    inProcedure = false;
+                    continue;
+                }
+
+                // Verwijder duidelijke orphan-parameterregels buiten procedures.
+                if (!inProcedure &&
+                    !IsContinuationFollower(lines, i) &&
+                    Regex.IsMatch(upper, @"^(BYVAL|BYREF|OPTIONAL|PARAMARRAY)\s+.*\)\s+AS\s+\w+\s*$"))
+                {
+                    lines[i].MarkedForDeletion = true;
+                }
             }
         }
 
@@ -821,6 +952,92 @@ namespace VBEAddIn
                     return line.Substring(0, i).TrimEnd();
             }
             return line;
+        }
+
+        private bool IsLineContinuation(string line)
+        {
+            if (string.IsNullOrEmpty(line))
+                return false;
+
+            // Analyseer zonder inline commentaar om valse positieven te voorkomen.
+            string codeOnly = RemoveInlineComment(line);
+            return codeOnly.TrimEnd().EndsWith("_");
+        }
+
+        private int GetContinuationBlockEndIndex(List<CodeLine> lines, int startIndex)
+        {
+            int currentIndex = startIndex;
+
+            while (currentIndex < lines.Count - 1 && IsLineContinuation(lines[currentIndex].OriginalText))
+                currentIndex++;
+
+            return currentIndex;
+        }
+
+        private bool IsContinuationFollower(List<CodeLine> lines, int index)
+        {
+            return index > 0 && IsLineContinuation(lines[index - 1].OriginalText);
+        }
+
+        private int RemoveOrphanFragmentsFromFinalOutput(List<CodeLine> lines)
+        {
+            bool inProcedure = false;
+            var toDelete = new List<int>();
+
+            for (int i = 0; i < lines.Count; i++)
+            {
+                string text = lines[i].NewText ?? lines[i].OriginalText ?? string.Empty;
+                string trimmed = text.Trim();
+                string upper = trimmed.ToUpper();
+
+                if (upper.Length == 0)
+                    continue;
+
+                if (Regex.IsMatch(upper, @"^(PUBLIC|PRIVATE|FRIEND)?\s*(SUB|FUNCTION|PROPERTY)\s+"))
+                {
+                    inProcedure = true;
+                    continue;
+                }
+
+                if (inProcedure && Regex.IsMatch(upper, @"^END\s+(SUB|FUNCTION|PROPERTY)"))
+                {
+                    inProcedure = false;
+                    continue;
+                }
+
+                if (!inProcedure &&
+                    Regex.IsMatch(upper, @"^(BYVAL|BYREF|OPTIONAL|PARAMARRAY)\s+"))
+                {
+                    toDelete.Add(i);
+                }
+
+                // Harde fallback: orphan parameterregel direct na End Sub/Function/Property.
+                // Dit is altijd ongeldig buiten een procedure-header en veroorzaakt compile-fouten.
+                if (Regex.IsMatch(upper, @"^(BYVAL|BYREF|OPTIONAL|PARAMARRAY)\s+"))
+                {
+                    int prev = i - 1;
+                    while (prev >= 0)
+                    {
+                        string prevText = (lines[prev].NewText ?? lines[prev].OriginalText ?? string.Empty).Trim();
+                        if (prevText.Length == 0)
+                        {
+                            prev--;
+                            continue;
+                        }
+
+                        if (Regex.IsMatch(prevText.ToUpper(), @"^END\s+(SUB|FUNCTION|PROPERTY)"))
+                        {
+                            toDelete.Add(i);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            foreach (int idx in toDelete.Distinct().OrderByDescending(x => x))
+                lines.RemoveAt(idx);
+
+            return toDelete.Distinct().Count();
         }
 
         private bool IsDimStatement(string line)
