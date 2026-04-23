@@ -2,7 +2,7 @@ namespace VBEAddIn
 {
     internal static class ChangelogData
     {
-        internal const string CurrentVersion = "1.3.3";
+        internal const string CurrentVersion = "1.4.0";
 
         // -----------------------------------------------------------------------
         // AGENT INSTRUCTIE: Bij elke nieuwe release voeg je een nieuw item toe
@@ -15,9 +15,11 @@ namespace VBEAddIn
         // -----------------------------------------------------------------------
         internal static readonly ChangelogEntry[] Entries = new[]
         {
-            new ChangelogEntry("1.3.3", "2026-04-07", new[]
+            new ChangelogEntry("1.4.0", "2026-04-23", new[]
             {
-                "+ UPDATE VOOR TEST TIMO",
+                "* CompleteCodeFormatter verwerkt VBA-regelafbrekingen met _ nu correct",
+                "* CompleteCodeFormatter behoudt meerregelige procedureheaders correct",
+                "* Formatteren van module of volledig bestand laat geen losse parameterregels meer achter",
             }),
             new ChangelogEntry("1.3.0", "2026-04-04", new[]
             {

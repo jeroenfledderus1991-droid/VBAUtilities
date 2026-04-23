@@ -4,10 +4,12 @@ Alle noemenswaardige wijzigingen worden bijgehouden in dit bestand.
 Formaat gebaseerd op [Keep a Changelog](https://keepachangelog.com/nl/1.0.0/).
 
 ---
-## [1.3.3] — 2026-04-07
+## [1.4.0] — 2026-04-23
 
-### Toegevoegd
-- UPDATE VOOR TEST TIMO
+### Fixes
+- CompleteCodeFormatter verwerkt VBA-regelafbrekingen met `_` nu correct
+- CompleteCodeFormatter behoudt meerregelige procedureheaders correct tijdens formatteren
+- Formatteren van module of volledig bestand laat geen losse parameterregels meer achter
 
 ---
 
