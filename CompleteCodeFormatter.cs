@@ -265,19 +265,14 @@ namespace VBEAddIn
 
             // Stap 8: Schrijf terug naar code module
             int changes = lines.Count(l => l.NewText != l.OriginalText);
-            
-            // Eerst alle oude regels verwijderen van achter naar voor
-            for (int i = totalLines; i >= 1; i--)
-            {
-                codeModule.DeleteLines(i, 1);
-            }
 
-            // Dan nieuwe regels in 1 batch invoegen (voorkomt VBE continuation-artefacten)
-            if (lines.Count > 0)
-            {
-                string outputBlock = string.Join("\r\n", lines.Select(l => l.NewText ?? string.Empty));
-                codeModule.InsertLines(1, outputBlock);
-            }
+            // Verwijder in 1 call en schrijf regel-voor-regel terug.
+            // Dit is robuuster voor VBA continuation-regels met string-literals.
+            if (totalLines > 0)
+                codeModule.DeleteLines(1, totalLines);
+
+            for (int i = 0; i < lines.Count; i++)
+                codeModule.InsertLines(i + 1, lines[i].NewText ?? string.Empty);
 
             CleanupOrphanLinesInCodeModule(codeModule);
 
@@ -715,6 +710,14 @@ namespace VBEAddIn
 
                 // Verwijder inline comments voor analyse
                 string lineForAnalysis = RemoveInlineComment(trimmedLine);
+
+                // Continuation-followers horen bij dezelfde statementregel.
+                // Behoud daarom het huidige indent-level en wijzig block-state niet.
+                if (IsContinuationFollower(lines, i))
+                {
+                    lines[i].NewText = string.Concat(Enumerable.Repeat(IndentUnit, indentLevel)) + trimmedLine;
+                    continue;
+                }
 
                 // Bepaal nieuwe indent level voor deze regel
                 int newIndentLevel = CalculateIndentLevel(lineForAnalysis, ref indentLevel, ref inProcedure);
